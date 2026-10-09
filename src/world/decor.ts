@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { cachedGeometry, cachedMaterial, mesh, pastel, roundedBox } from '../core/cache';
 import { blobShadow } from '../models/blob-shadow';
 import { catPosterTexture, logoTexture } from '../models/canvas-art';
-import { PALETTE, STORE } from './layout';
+import { PALETTE, PLANT_SPOTS, STORE } from './layout';
 
 const BACK_FACE = STORE.minZ;
 const RIGHT_FACE = STORE.maxX;
@@ -140,13 +140,7 @@ export function buildDecor(): THREE.Group {
   clock.position.set(3.9, 2.5, BACK_FACE + 0.05);
   g.add(clock);
 
-  const plants: Array<[number, number, number, string]> = [
-    [STORE.minX + 0.55, STORE.minZ + 0.55, 1.25, '#7fcf9c'],
-    [STORE.maxX - 0.55, STORE.minZ + 0.55, 1.1, '#92d9a8'],
-    [STORE.maxX - 0.55, STORE.maxZ - 0.6, 1.0, '#7fcf9c'],
-    [STORE.minX + 0.5, 5.2, 0.85, '#a5dfb4'],
-  ];
-  for (const [x, z, s, c] of plants) {
+  for (const [x, z, s, c] of PLANT_SPOTS) {
     const p = plant(s, c);
     p.position.set(x, 0, z);
     p.rotation.y = x * 1.3 + z;

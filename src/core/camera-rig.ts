@@ -44,13 +44,13 @@ export class CameraRig {
     // Portrait screens are tall: look down more so the floor fills them, not the sky.
     this.portraitDir = new THREE.Vector3(0, 1.6, 1).normalize();
     this.dir = this.landscapeDir.clone();
-    this.baseDistance = opts.distance ?? 11;
-    this.minZoom = opts.minZoom ?? 0.6;
-    this.maxZoom = opts.maxZoom ?? 1.35;
+    this.baseDistance = opts.distance ?? 8.5;
+    this.minZoom = opts.minZoom ?? 0.65;
+    this.maxZoom = opts.maxZoom ?? 1.6;
     this.damping = opts.damping ?? 6;
     this.lookHeight = opts.lookHeight ?? 1.1;
 
-    element.addEventListener('wheel', this.onWheel, { passive: false });
+    window.addEventListener('wheel', this.onWheel, { passive: false });
     element.addEventListener('pointerdown', this.onPointerDown);
     element.addEventListener('pointermove', this.onPointerMove);
     element.addEventListener('pointerup', this.onPointerUp);
