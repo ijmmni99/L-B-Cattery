@@ -17,11 +17,13 @@ import { InteractionSystem } from './game/interactions';
 import { Highlighter } from './game/highlight';
 import { TargetRing } from './game/target-ring';
 import { createDemoCrate } from './game/demo-crate';
+import { CatShowcase } from './game/cat-showcase';
 import { createJoystick } from './ui/joystick';
 import { createActionButton } from './ui/action-button';
 import { createCrosshair } from './ui/crosshair';
 import { setupLookInput } from './ui/look-input';
 import { createSettingsPanel } from './ui/settings-panel';
+import { createCatInfoCard, createShowcasePanel } from './ui/cat-showcase-ui';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene');
 const ui = document.querySelector<HTMLDivElement>('#ui');
@@ -45,7 +47,8 @@ const interactions = new InteractionSystem();
 const highlighter = new Highlighter();
 const ring = new TargetRing();
 gfx.scene.add(ring.mesh);
-const crate = createDemoCrate(gfx.scene, player, interactions, colliders, new THREE.Vector3(-1.2, 0, 2.2));
+const crate = createDemoCrate(gfx.scene, player, interactions, colliders, new THREE.Vector3(-3.6, 0, 2.6));
+const showcase = new CatShowcase(gfx.scene, interactions, colliders);
 
 // Re-apply now that lights and meshes exist so shadow settings match the profile.
 gfx.applyQuality(getSettings().quality);
@@ -62,9 +65,12 @@ const crosshair = createCrosshair(ui);
 const actionButton = createActionButton(ui, input);
 input.onAction(() => interactions.trigger());
 createSettingsPanel(ui);
+createShowcasePanel(ui, showcase);
+const catCard = createCatInfoCard(ui);
 
 const loop = new GameLoop(() => gfx.render());
 loop.add(store.update);
+loop.add((dt) => showcase.update(dt));
 loop.add((dt) => {
   input.update();
   player.update(dt, input, colliders);
@@ -76,13 +82,14 @@ loop.add((dt) => {
   actionButton.setLabel(label);
   crosshair.setOnTarget(label !== null);
   highlighter.setTarget(interactions.highlightTarget);
+  catCard.show(showcase.catFor(target)?.data ?? null);
   highlighter.update(dt);
   ring.update(dt, crate.placeSpot());
 });
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

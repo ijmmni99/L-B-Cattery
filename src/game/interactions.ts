@@ -8,6 +8,8 @@ export interface Interactable {
    * Place, which apply whenever no object is targeted.
    */
   object?: THREE.Object3D;
+  /** What to outline when targeted (defaults to `object`). */
+  highlight?: THREE.Object3D;
   /** Button label, or null when this can't be used right now. */
   label(): string | null;
   act(): void;
@@ -73,7 +75,7 @@ export class InteractionSystem {
 
   /** The object to highlight (null for ambient actions). */
   get highlightTarget(): THREE.Object3D | null {
-    return this.current?.object ?? null;
+    return this.current?.highlight ?? this.current?.object ?? null;
   }
 
   trigger(): boolean {
