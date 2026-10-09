@@ -42,8 +42,7 @@ export function createDemoCrate(
 
   interactions.add({
     position: crate.position,
-    radius: 0.32,
-    aimHeight: H / 2,
+    object: crate,
     label: () => (player.carried ? null : 'Pick up'),
     act: () => {
       world.remove(colliderId);
@@ -78,7 +77,6 @@ export function createDemoCrate(
   const spot = new THREE.Vector3();
   interactions.add({
     position: spot,
-    radius: 50, // always "under the crosshair" while carrying
     label: () => {
       if (player.carried !== crate) return null;
       spot.copy(computeSpot());

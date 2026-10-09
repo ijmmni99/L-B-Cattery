@@ -44,8 +44,6 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
   },
 };
 
-const STORAGE_KEY = 'lb-quality';
-
 /** Rough device-tier guess; the player can override in Settings. */
 export function detectDefaultQuality(): QualityLevel {
   const nav = navigator as Navigator & { deviceMemory?: number };
@@ -55,22 +53,4 @@ export function detectDefaultQuality(): QualityLevel {
   if (cores <= 4 || memory <= 3) return 'low';
   if (isMobile) return 'medium';
   return 'high';
-}
-
-export function loadQuality(): QualityLevel {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'low' || stored === 'medium' || stored === 'high') return stored;
-  } catch {
-    // storage unavailable (private mode); fall through to detection
-  }
-  return detectDefaultQuality();
-}
-
-export function saveQuality(level: QualityLevel): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, level);
-  } catch {
-    // ignore: preference simply won't persist
-  }
 }

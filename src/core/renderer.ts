@@ -5,16 +5,26 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { QUALITY_PROFILES, type QualityLevel, type QualityProfile } from './quality';
 
-// First-person: comfortable on wide phone screens without fish-eye.
-const BASE_FOV = 54;
-const MAX_FOV = 80;
+/** First-person FOV, applied to the screen's shorter axis. */
+export const WORLD_FOV = 72;
+/** Viewmodel (hands / held items) uses a calmer FOV so they don't distort. */
+export const VIEWMODEL_FOV = 58;
+const MAX_FOV = 100;
 
-/** In portrait, keep the landscape horizontal view by widening vertical FOV. */
-function fovForAspect(aspect: number): number {
-  if (aspect >= 1) return BASE_FOV;
-  const half = THREE.MathUtils.degToRad(BASE_FOV / 2);
-  const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(half) / aspect));
-  return Math.min(fov, MAX_FOV);
+/**
+ * Landscape: `fov` is vertical. Portrait: `fov` becomes the horizontal angle
+ * (converted to vertical for three.js) so the view doesn't collapse.
+ */
+export function fovForAspect(fov: number, aspect: number): number {
+  if (aspect >= 1) return fov;
+  const half = THREE.MathUtils.degToRad(fov / 2);
+  const v = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(half) / aspect));
+  return Math.min(v, MAX_FOV);
+}
+
+export interface RenderLayer {
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
 }
 
 /**
@@ -28,6 +38,8 @@ export class GameRenderer {
   readonly camera: THREE.PerspectiveCamera;
   profile: QualityProfile;
 
+  /** Drawn after the world with depth cleared, so it never clips into walls. */
+  private overlay: RenderLayer | null = null;
   private composer: EffectComposer | null = null;
   private bloomPass: UnrealBloomPass | null = null;
   private readonly resizeListeners: Array<(w: number, h: number) => void> = [];
@@ -48,7 +60,8 @@ export class GameRenderer {
     // Reset stats manually so the debug counter covers every pass in a frame.
     this.renderer.info.autoReset = false;
 
-    this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 200);
+    // Near plane 0.05 so walls right in front of the eye don't get cut open.
+    this.camera = new THREE.PerspectiveCamera(WORLD_FOV, 1, 0.05, 120);
 
     this.applyQuality(level);
     window.addEventListener('resize', this.resize);
@@ -84,14 +97,33 @@ export class GameRenderer {
     this.resize();
   }
 
+  setOverlay(layer: RenderLayer): void {
+    this.overlay = layer;
+    // Rebuild the bloom chain so it includes the overlay pass.
+    if (this.composer) {
+      this.disposeComposer();
+      this.ensureComposer();
+    }
+    this.resize();
+  }
+
   onResize(fn: (w: number, h: number) => void): void {
     this.resizeListeners.push(fn);
   }
 
   render(): void {
     this.renderer.info.reset();
-    if (this.composer) this.composer.render();
-    else this.renderer.render(this.scene, this.camera);
+    if (this.composer) {
+      this.composer.render();
+      return;
+    }
+    this.renderer.render(this.scene, this.camera);
+    if (this.overlay) {
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.overlay.scene, this.overlay.camera);
+      this.renderer.autoClear = true;
+    }
   }
 
   get drawCalls(): number {
@@ -103,6 +135,12 @@ export class GameRenderer {
     const size = this.renderer.getSize(new THREE.Vector2());
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    if (this.overlay) {
+      const pass = new RenderPass(this.overlay.scene, this.overlay.camera);
+      pass.clear = false;
+      pass.clearDepth = true;
+      this.composer.addPass(pass);
+    }
     // Threshold 1.0: only HDR-bright emissives (signs, lamps) glow, not walls.
     this.bloomPass = new UnrealBloomPass(size, 0.3, 0.4, 1.0);
     this.composer.addPass(this.bloomPass);
@@ -122,8 +160,14 @@ export class GameRenderer {
     const h = window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
-    this.camera.fov = fovForAspect(this.camera.aspect);
+    this.camera.fov = fovForAspect(WORLD_FOV, this.camera.aspect);
     this.camera.updateProjectionMatrix();
+    if (this.overlay) {
+      const c = this.overlay.camera;
+      c.aspect = w / h;
+      c.fov = fovForAspect(VIEWMODEL_FOV, c.aspect);
+      c.updateProjectionMatrix();
+    }
     if (this.composer) {
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
       this.composer.setSize(w, h);

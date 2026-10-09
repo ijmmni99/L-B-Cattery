@@ -7,9 +7,6 @@ const MAX_SPEED = 3.4;
 const ACCEL = 12;
 export const PLAYER_RADIUS = 0.32;
 
-/** Where a carried object sits relative to the camera (bottom-centre of view). */
-const CARRY_OFFSET = new THREE.Vector3(0, -0.5, -0.95);
-
 /** First-person player: yaw-relative movement, collisions, carrying. */
 export class Player {
   readonly position: THREE.Vector3;
@@ -19,9 +16,14 @@ export class Player {
   speed = 0;
   private readonly desired = new THREE.Vector3();
 
+  /**
+   * @param holdAnchor where carried objects attach (the viewmodel's hands),
+   *   rendered as an overlay so held items never clip into walls.
+   */
   constructor(
     start: THREE.Vector3,
     readonly view: FirstPersonCamera,
+    private readonly holdAnchor: THREE.Object3D,
   ) {
     this.position = start.clone();
   }
@@ -58,9 +60,9 @@ export class Player {
   pickUp(obj: THREE.Object3D): void {
     this.carried = obj;
     obj.removeFromParent();
-    obj.position.copy(CARRY_OFFSET);
-    obj.rotation.set(0.12, 0, 0);
-    this.view.camera.add(obj);
+    obj.position.set(0, 0, 0);
+    obj.rotation.set(0, 0, 0);
+    this.holdAnchor.add(obj);
   }
 
   /** Detaches the carried object and returns it (caller re-parents it). */

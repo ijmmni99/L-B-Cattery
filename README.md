@@ -2,8 +2,9 @@
 
 A first-person 3D cattery shop tycoon for mobile browsers (installable PWA). Vite + TypeScript + Three.js.
 
-**Controls:** left thumb = move (floating joystick), drag anywhere else = look, big button = context action.
-Desktop: click to lock mouse, WASD to move, E / Space to interact, Esc to release.
+**Controls (first-person, FOV 72):** left thumb = move (floating joystick), drag on the right = look,
+big button or a tap on the crosshair = interact. Settings (gear): graphics, look sensitivity, head bob, vibration.
+Desktop: click to lock the mouse, WASD to move, click / E / Space to interact, Esc to release.
 
 ## Run
 

@@ -8,14 +8,18 @@ export interface ActionButton {
   setLabel(label: string | null): void;
 }
 
-/** Big context action button (bottom-right). Also fires on E / Space. */
+/**
+ * Big context action button (bottom-right) with the target's action name in
+ * a pill above it. Also fires on E / Space and on centre taps.
+ */
 export function createActionButton(parent: HTMLElement, input: Input): ActionButton {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'action-button';
-  btn.innerHTML = `${HAND_ICON}<span class="action-label"></span>`;
-  const label = btn.querySelector<HTMLSpanElement>('.action-label');
-  parent.appendChild(btn);
+  const wrap = document.createElement('div');
+  wrap.className = 'action-wrap';
+  wrap.innerHTML = `<div class="action-label"></div><button type="button" class="action-button">${HAND_ICON}</button>`;
+  parent.appendChild(wrap);
+  const label = wrap.querySelector<HTMLDivElement>('.action-label');
+  const btn = wrap.querySelector<HTMLButtonElement>('.action-button');
+  if (!label || !btn) throw new Error('action button markup');
 
   // undefined = never set, so the first setLabel(null) still applies 'idle'.
   let current: string | null | undefined;
@@ -37,8 +41,8 @@ export function createActionButton(parent: HTMLElement, input: Input): ActionBut
     setLabel(text) {
       if (text === current) return;
       current = text;
-      btn.classList.toggle('idle', text === null);
-      if (label) label.textContent = text ?? '';
+      wrap.classList.toggle('idle', text === null);
+      if (text) label.textContent = text;
     },
   };
 }

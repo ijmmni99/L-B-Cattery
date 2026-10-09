@@ -1,18 +1,22 @@
 import * as THREE from 'three';
+import { getSettings } from './settings';
 
 export const EYE_HEIGHT = 1.6;
 const PITCH_LIMIT = THREE.MathUtils.degToRad(80);
+/** Base radians per pixel of drag, scaled by the Settings sensitivity. */
+const BASE_SENSITIVITY = 0.0042;
 
 /**
  * First-person view: yaw/pitch driven by look input, eye placed at the
- * player position with a gentle head bob while walking.
- * yaw = 0 looks toward -Z.
+ * player position with an optional head bob. yaw = 0 looks toward -Z.
  */
 export class FirstPersonCamera {
   yaw = 0;
   pitch = THREE.MathUtils.degToRad(-8);
-  /** Radians per pixel of drag. */
-  sensitivity = 0.0042;
+  /** Look change applied this frame (for viewmodel sway). */
+  readonly lookDelta = new THREE.Vector2();
+  private pendingYaw = 0;
+  private pendingPitch = 0;
   private bobPhase = 0;
   private bobAmount = 0;
   private readonly dir = new THREE.Vector3();
@@ -22,18 +26,28 @@ export class FirstPersonCamera {
   }
 
   addLook(dxPixels: number, dyPixels: number, scale = 1): void {
-    this.yaw -= dxPixels * this.sensitivity * scale;
-    this.pitch = THREE.MathUtils.clamp(this.pitch - dyPixels * this.sensitivity * scale, -PITCH_LIMIT, PITCH_LIMIT);
+    const s = BASE_SENSITIVITY * getSettings().lookSensitivity * scale;
+    this.pendingYaw -= dxPixels * s;
+    this.pendingPitch -= dyPixels * s;
   }
 
-  /** `speed` (m/s) drives head bob. */
+  /** `speed` (m/s) drives the optional head bob. */
   update(dt: number, position: THREE.Vector3, speed: number): void {
-    const moving = Math.min(speed / 3, 1);
+    const before = this.pitch;
+    this.yaw += this.pendingYaw;
+    this.pitch = THREE.MathUtils.clamp(this.pitch + this.pendingPitch, -PITCH_LIMIT, PITCH_LIMIT);
+    this.lookDelta.set(this.pendingYaw, this.pitch - before);
+    this.pendingYaw = 0;
+    this.pendingPitch = 0;
+
+    const bobOn = getSettings().headBob;
+    const moving = bobOn ? Math.min(speed / 3, 1) : 0;
     this.bobAmount += (moving - this.bobAmount) * Math.min(dt * 8, 1);
     this.bobPhase += dt * (6 + speed * 1.8);
     const bob = Math.sin(this.bobPhase * 2) * 0.03 * this.bobAmount;
     this.camera.position.set(position.x, EYE_HEIGHT + bob, position.z);
     this.camera.rotation.set(this.pitch, this.yaw, Math.sin(this.bobPhase) * 0.004 * this.bobAmount);
+    this.camera.updateMatrixWorld();
   }
 
   get eye(): THREE.Vector3 {
