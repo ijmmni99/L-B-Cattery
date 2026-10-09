@@ -6,7 +6,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { QUALITY_PROFILES, type QualityLevel, type QualityProfile } from './quality';
 
 const BASE_FOV = 50;
-const MAX_FOV = 80;
+const MAX_FOV = 62;
 
 /** In portrait, keep the landscape horizontal view by widening vertical FOV. */
 function fovForAspect(aspect: number): number {

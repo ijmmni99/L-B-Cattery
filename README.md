@@ -34,7 +34,7 @@ src/
 ## Milestones
 
 - [x] M0 Setup
-- [ ] M1 Store shell and look
+- [x] M1 Store shell and look
 - [ ] M2 Player and controls
 - [ ] M3 Cats (CatBuilder)
 - [ ] M4 Products and shelves

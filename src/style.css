@@ -96,16 +96,3 @@ body {
   background: var(--mint);
   color: #fff;
 }
-
-.m0-title {
-  position: absolute;
-  left: calc(12px + var(--safe-left));
-  top: calc(12px + var(--safe-top));
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: var(--pill-bg);
-  box-shadow: var(--shadow);
-  font-weight: 800;
-  font-size: 15px;
-  pointer-events: none;
-}
