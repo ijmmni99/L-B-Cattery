@@ -9,7 +9,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  */
 export function mergeStatic(root: THREE.Object3D): THREE.Group {
   root.updateMatrixWorld(true);
-  const buckets = new Map<THREE.Material, { geos: THREE.BufferGeometry[]; cast: boolean; receive: boolean }>();
+  // Bucket by material AND shadow flags so a non-casting wall never starts casting.
+  const buckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[]; cast: boolean; receive: boolean }>();
   const remove: THREE.Mesh[] = [];
 
   root.traverse((obj) => {
@@ -21,14 +22,13 @@ export function mergeStatic(root: THREE.Object3D): THREE.Group {
     for (const name of Object.keys(geo.attributes)) {
       if (name !== 'position' && name !== 'normal' && name !== 'uv' && name !== 'color') geo.deleteAttribute(name);
     }
-    let b = buckets.get(mat);
+    const key = `${mat.uuid}:${obj.castShadow}:${obj.receiveShadow}`;
+    let b = buckets.get(key);
     if (!b) {
-      b = { geos: [], cast: false, receive: false };
-      buckets.set(mat, b);
+      b = { mat, geos: [], cast: obj.castShadow, receive: obj.receiveShadow };
+      buckets.set(key, b);
     }
     b.geos.push(geo);
-    b.cast ||= obj.castShadow;
-    b.receive ||= obj.receiveShadow;
     remove.push(obj);
   });
 
@@ -36,7 +36,8 @@ export function mergeStatic(root: THREE.Object3D): THREE.Group {
 
   const merged = new THREE.Group();
   merged.name = 'merged-static';
-  for (const [mat, b] of buckets) {
+  for (const b of buckets.values()) {
+    const mat = b.mat;
     const geo = mergeGeometries(b.geos, false);
     for (const g of b.geos) g.dispose();
     if (!geo) {

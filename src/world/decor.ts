@@ -6,6 +6,7 @@ import { PALETTE, PLANT_SPOTS, STORE } from './layout';
 
 const BACK_FACE = STORE.minZ;
 const RIGHT_FACE = STORE.maxX;
+const FRONT_FACE = STORE.maxZ;
 
 function logoSign(): THREE.Group {
   const g = new THREE.Group();
@@ -128,6 +129,7 @@ export function buildDecor(): THREE.Group {
 
   for (const x of [-5.2, 5.2]) g.add(sconce(x, BACK_FACE + 0.05, 0));
   for (const z of [-2.6, 2.6]) g.add(sconce(RIGHT_FACE - 0.05, z, -Math.PI / 2));
+  for (const x of [-3.5, 3.5]) g.add(sconce(x, FRONT_FACE - 0.05, Math.PI));
 
   [0, 1, 2].forEach((i) => {
     const p = poster(i);

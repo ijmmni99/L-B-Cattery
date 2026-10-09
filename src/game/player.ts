@@ -1,41 +1,47 @@
 import * as THREE from 'three';
 import type { Input } from '../core/input';
-import { Character, PLAYER_PARAMS } from '../models/character-builder';
+import type { FirstPersonCamera } from '../core/fp-camera';
 import type { CollisionWorld } from '../world/colliders';
 
-const MAX_SPEED = 4.2;
-const ACCEL = 14;
-const TURN_RATE = 12;
+const MAX_SPEED = 3.4;
+const ACCEL = 12;
 export const PLAYER_RADIUS = 0.32;
 
-function angleLerp(a: number, b: number, t: number): number {
-  let d = b - a;
-  d = Math.atan2(Math.sin(d), Math.cos(d));
-  return a + d * t;
-}
+/** Where a carried object sits relative to the camera (bottom-centre of view). */
+const CARRY_OFFSET = new THREE.Vector3(0, -0.5, -0.95);
 
-/** Player avatar: camera-relative movement, smooth turning, collisions. */
+/** First-person player: yaw-relative movement, collisions, carrying. */
 export class Player {
-  readonly character = new Character(PLAYER_PARAMS);
   readonly position: THREE.Vector3;
   readonly velocity = new THREE.Vector3();
-  facing = 0;
   carried: THREE.Object3D | null = null;
+  /** Actual ground speed this frame (m/s). */
+  speed = 0;
   private readonly desired = new THREE.Vector3();
 
-  constructor(start: THREE.Vector3) {
+  constructor(
+    start: THREE.Vector3,
+    readonly view: FirstPersonCamera,
+  ) {
     this.position = start.clone();
-    this.character.root.position.copy(this.position);
   }
 
-  get object(): THREE.Object3D {
-    return this.character.root;
+  get yaw(): number {
+    return this.view.yaw;
   }
 
-  /** Camera looks toward -Z with fixed yaw, so screen-up = world -Z. */
   update(dt: number, input: Input, world: CollisionWorld): void {
     const slow = this.carried ? 0.85 : 1;
-    this.desired.set(input.move.x, 0, -input.move.y).multiplyScalar(MAX_SPEED * slow);
+    const yaw = this.view.yaw;
+    // Forward (-Z at yaw 0) and right vectors on the floor plane.
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    const rx = Math.cos(yaw);
+    const rz = -Math.sin(yaw);
+    const mx = input.move.x;
+    const my = input.move.y;
+    this.desired.set(rx * mx + fx * my, 0, rz * mx + fz * my).multiplyScalar(MAX_SPEED * slow);
+
     const k = 1 - Math.exp(-ACCEL * dt);
     this.velocity.lerp(this.desired, k);
     if (this.velocity.lengthSq() < 1e-4) this.velocity.set(0, 0, 0);
@@ -44,27 +50,17 @@ export class Player {
     const pz = this.position.z;
     this.position.addScaledVector(this.velocity, dt);
     world.resolveCircle(this.position, PLAYER_RADIUS);
+    this.speed = dt > 0 ? Math.hypot(this.position.x - px, this.position.z - pz) / dt : 0;
 
-    // Animate from real movement so pushing into a wall doesn't moonwalk.
-    const speed = dt > 0 ? Math.hypot(this.position.x - px, this.position.z - pz) / dt : 0;
-    if (input.move.lengthSq() > 0.01) {
-      const target = Math.atan2(input.move.x, -input.move.y);
-      this.facing = angleLerp(this.facing, target, 1 - Math.exp(-TURN_RATE * dt));
-    }
-
-    const root = this.character.root;
-    root.position.copy(this.position);
-    root.rotation.y = this.facing;
-    this.character.carrying = this.carried !== null;
-    this.character.animate(dt, speed);
+    this.view.update(dt, this.position, this.speed);
   }
 
   pickUp(obj: THREE.Object3D): void {
     this.carried = obj;
     obj.removeFromParent();
-    obj.position.set(0, 0, 0);
-    obj.rotation.set(0, 0, 0);
-    this.character.carryAnchor.add(obj);
+    obj.position.copy(CARRY_OFFSET);
+    obj.rotation.set(0.12, 0, 0);
+    this.view.camera.add(obj);
   }
 
   /** Detaches the carried object and returns it (caller re-parents it). */
@@ -74,14 +70,5 @@ export class Player {
     obj.removeFromParent();
     this.carried = null;
     return obj;
-  }
-
-  /** Point on the floor just in front of the player. */
-  frontPoint(distance = 0.85): THREE.Vector3 {
-    return new THREE.Vector3(
-      this.position.x + Math.sin(this.facing) * distance,
-      0,
-      this.position.z + Math.cos(this.facing) * distance,
-    );
   }
 }

@@ -93,10 +93,19 @@ export function buildWalls(): THREE.Group {
   g.name = 'walls';
   const { minX, maxX, minZ, maxZ, wallHeight } = STORE;
 
+  // The room is closed (first-person), so only the sunny storefront wall
+  // casts shadows; the others would plunge the whole floor into shade.
+  const shaded = new THREE.Group();
   // Back wall (runs along X), inner face toward +Z.
-  finishedWall(g, 'x', minZ - T / 2, 1, minX - T, maxX + T);
+  finishedWall(shaded, 'x', minZ - T / 2, 1, minX - T, maxX + T);
+  // Front wall, inner face toward -Z.
+  finishedWall(shaded, 'x', maxZ + T / 2, -1, minX - T, maxX + T);
   // Right wall (runs along Z), inner face toward -X.
-  finishedWall(g, 'z', maxX + T / 2, -1, minZ, maxZ + T);
+  finishedWall(shaded, 'z', maxX + T / 2, -1, minZ, maxZ);
+  shaded.traverse((o) => {
+    o.castShadow = false;
+  });
+  g.add(shaded);
 
   // Left wall: solid / window / pillar / door / solid, inner face toward +X.
   const lx = minX - T / 2;
@@ -107,18 +116,5 @@ export function buildWalls(): THREE.Group {
   finishedWall(g, 'z', lx, 1, DOOR.zMin, DOOR.zMax, DOOR.height, wallHeight);
   finishedWall(g, 'z', lx, 1, DOOR.zMax, maxZ + T);
 
-  // Wall-top caps for a clean "dollhouse" edge.
-  const cap = pastel(PALETTE.trim, 0.5);
-  g.add(slab('x', minZ - T / 2, minX - T - 0.04, maxX + T + 0.04, wallHeight, wallHeight + 0.08, T + 0.08, cap));
-  g.add(slab('z', maxX + T / 2, minZ - T, maxZ + T + 0.04, wallHeight, wallHeight + 0.08, T + 0.08, cap));
-  g.add(slab('z', lx, minZ - T, maxZ + T + 0.04, wallHeight, wallHeight + 0.08, T + 0.08, cap));
-
-  // Low front rim (camera side).
-  const rim = slab('x', maxZ + T / 2, minX - T, maxX + T, 0, STORE.frontRimHeight, T, vertexTinted('wainscot'), [
-    PALETTE.mintDark,
-    PALETTE.mint,
-  ]);
-  g.add(rim);
-  g.add(slab('x', maxZ + T / 2, minX - T - 0.04, maxX + T + 0.04, STORE.frontRimHeight, STORE.frontRimHeight + 0.07, T + 0.08, cap));
   return g;
 }

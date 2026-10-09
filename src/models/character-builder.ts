@@ -40,19 +40,6 @@ export function randomCharacterParams(rand: () => number = Math.random): Charact
   };
 }
 
-/** The shop owner: mint polo with a cream apron. */
-export const PLAYER_PARAMS: CharacterParams = {
-  skin: '#f6caa6',
-  hair: 'ponytail',
-  hairColor: '#5a3b28',
-  accent: '#ff8fab',
-  shirt: '#7fcfb8',
-  pants: '#3b3a4a',
-  shoes: '#ffffff',
-  height: 1,
-  apron: '#fff4e2',
-};
-
 const HIP_Y = 0.62;
 const SHOULDER_Y = 1.16;
 const HEAD_Y = 1.5;

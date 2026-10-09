@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameRenderer } from './core/renderer';
 import { GameLoop } from './core/loop';
 import { FpsCounter } from './core/fps';
-import { CameraRig } from './core/camera-rig';
+import { FirstPersonCamera } from './core/fp-camera';
 import { Input } from './core/input';
 import { loadQuality, saveQuality } from './core/quality';
 import { setupPwa } from './core/pwa';
@@ -17,6 +17,8 @@ import { createDemoCrate } from './game/demo-crate';
 import { createQualityPicker } from './ui/quality-picker';
 import { createJoystick } from './ui/joystick';
 import { createActionButton } from './ui/action-button';
+import { createCrosshair } from './ui/crosshair';
+import { setupLookInput } from './ui/look-input';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene');
 const ui = document.querySelector<HTMLDivElement>('#ui');
@@ -27,25 +29,23 @@ const gfx = new GameRenderer(canvas, quality);
 const store = buildStore(gfx.scene);
 const colliders = buildStoreColliders();
 
+// Camera joins the scene so carried objects parented to it render.
+const view = new FirstPersonCamera(gfx.camera);
+gfx.scene.add(gfx.camera);
 const input = new Input();
-const player = new Player(new THREE.Vector3(PLAYER_START.x, 0, PLAYER_START.z));
-gfx.scene.add(player.object);
+const player = new Player(new THREE.Vector3(PLAYER_START.x, 0, PLAYER_START.z), view);
 
 const interactions = new InteractionSystem();
 const ring = new TargetRing();
 gfx.scene.add(ring.mesh);
-createDemoCrate(gfx.scene, player, interactions, colliders, new THREE.Vector3(-2, 0, 0.5));
+const crate = createDemoCrate(gfx.scene, player, interactions, colliders, new THREE.Vector3(-1.2, 0, 2.2));
 
 // Re-apply now that lights and meshes exist so shadow settings match the profile.
 gfx.applyQuality(quality);
 
-const rig = new CameraRig(gfx.camera, canvas);
-rig.setAspect(gfx.camera.aspect);
-gfx.onResize((w, h) => rig.setAspect(w / h));
-rig.target.copy(player.position);
-rig.snap();
-
+setupLookInput(canvas, view);
 createJoystick(ui, input);
+const crosshair = createCrosshair(ui);
 const actionButton = createActionButton(ui, input);
 input.onAction(() => interactions.trigger());
 createQualityPicker(ui, quality, (level) => {
@@ -58,16 +58,16 @@ loop.add(store.update);
 loop.add((dt) => {
   input.update();
   player.update(dt, input, colliders);
-  const target = interactions.update(player.position, player.facing);
-  actionButton.setLabel(target?.label() ?? null);
-  ring.update(dt, target?.position ?? null, target && target.radius < 1 ? 0.45 : 0.35);
-  rig.target.copy(player.position);
-  rig.update(dt);
+  const target = interactions.update(view.eye, view.direction);
+  const label = target?.label() ?? null;
+  actionButton.setLabel(label);
+  crosshair.setTarget(label);
+  ring.update(dt, crate.placeSpot());
 });
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, interactions };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

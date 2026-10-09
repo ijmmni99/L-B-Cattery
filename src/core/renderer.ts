@@ -5,8 +5,9 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { QUALITY_PROFILES, type QualityLevel, type QualityProfile } from './quality';
 
-const BASE_FOV = 50;
-const MAX_FOV = 62;
+// First-person: comfortable on wide phone screens without fish-eye.
+const BASE_FOV = 54;
+const MAX_FOV = 80;
 
 /** In portrait, keep the landscape horizontal view by widening vertical FOV. */
 function fovForAspect(aspect: number): number {

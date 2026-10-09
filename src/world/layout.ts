@@ -1,7 +1,7 @@
 /**
- * Store dimensions in metres. The store is a "dollhouse" room: back wall at
- * -Z, right wall at +X, storefront (window + door) on the left wall at -X,
- * and only a low rim at +Z so the follow camera can look in.
+ * Store dimensions in metres. Closed room seen in first person: back wall
+ * at -Z, front wall at +Z, right wall at +X, storefront (window + door) on
+ * the left wall at -X.
  */
 export const STORE = {
   minX: -8,
@@ -11,7 +11,6 @@ export const STORE = {
   wallHeight: 3.2,
   wallThickness: 0.3,
   wainscotHeight: 1.05,
-  frontRimHeight: 0.45,
 } as const;
 
 /** Big shop window on the left wall (z range, y range). */
@@ -29,7 +28,7 @@ export const PLANT_SPOTS: ReadonlyArray<readonly [number, number, number, string
 ];
 
 /** Where the player starts each session. */
-export const PLAYER_START = { x: 0, z: 2.5 } as const;
+export const PLAYER_START = { x: 0, z: 4.2 } as const;
 
 export const PALETTE = {
   cream: '#fff4e2',

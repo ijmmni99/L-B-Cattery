@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeStatic } from '../core/merge-static';
+import { buildCeiling } from './ceiling';
 import { buildDecor } from './decor';
 import { buildLighting } from './lighting';
 import { buildStorefront } from './storefront';
@@ -15,7 +16,7 @@ export function buildStore(scene: THREE.Scene): StoreWorld {
   buildLighting(scene);
   const root = new THREE.Group();
   root.name = 'store';
-  root.add(buildFloor(), buildWalls(), buildDecor());
+  root.add(buildFloor(), buildWalls(), buildCeiling(), buildDecor());
   const front = buildStorefront();
   root.add(front.group);
 
