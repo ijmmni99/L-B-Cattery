@@ -9,6 +9,7 @@ import { getProductModel } from '../models/product-factory';
 import type { CollisionWorld } from '../world/colliders';
 import { SHELF_SPOTS, type ShelfSpot } from '../world/shelf-layout';
 import type { Box, BoxManager } from './boxes';
+import { gameStore, spendMoney } from './state';
 import { PriceTagLayer } from './price-tags';
 import { NO_OUTLINE, type InfoCardData, type Interactable, type InteractionSystem } from './interactions';
 
@@ -211,22 +212,47 @@ export class ShelfManager {
     private readonly boxes: BoxManager,
     private readonly onLaunch: () => void = () => {},
   ) {
-    const frames = new THREE.Group();
-    const proxies = new THREE.Group();
-    for (const spot of SHELF_SPOTS) {
-      const unit = new ShelfUnit(spot);
-      this.units.push(unit);
-      frames.add(unit.staticGroup);
-      for (const slot of unit.slots) {
-        proxies.add(slot.proxy);
-        this.registerSlot(slot);
-      }
-      const alongX = Math.abs(Math.sin(spot.yaw)) < 0.5;
-      colliders.addCentered(spot.x, spot.z, alongX ? unit.width : unit.depth, alongX ? unit.depth : unit.width);
+    this.colliders = colliders;
+    for (const spot of SHELF_SPOTS) if (spot.start) this.addUnit(spot);
+    scene.add(this.frames, this.proxies, this.itemsRoot, this.tags.root, this.marker.mesh);
+  }
+
+  private readonly frames = new THREE.Group();
+  private readonly proxies = new THREE.Group();
+  private readonly colliders: CollisionWorld;
+
+  isOwned(spot: ShelfSpot): boolean {
+    return this.units.some((u) => u.spot.id === spot.id);
+  }
+
+  /** Builds a shelf unit at a spot (start-up, buying, or loading a save). */
+  addUnit(spot: ShelfSpot): ShelfUnit | null {
+    if (this.isOwned(spot)) return null;
+    const unit = new ShelfUnit(spot);
+    this.units.push(unit);
+    const g = new THREE.Group();
+    g.add(unit.staticGroup);
+    // Collapse the static frame into a few draw calls.
+    g.add(mergeStatic(g));
+    this.frames.add(g);
+    for (const slot of unit.slots) {
+      this.proxies.add(slot.proxy);
+      this.registerSlot(slot);
     }
-    // Collapse the static frames into a handful of draw calls.
-    frames.add(mergeStatic(frames));
-    scene.add(frames, proxies, this.itemsRoot, this.tags.root, this.marker.mesh);
+    const alongX = Math.abs(Math.sin(spot.yaw)) < 0.5;
+    this.colliders.addCentered(spot.x, spot.z, alongX ? unit.width : unit.depth, alongX ? unit.depth : unit.width);
+    this.dirty = true;
+    return unit;
+  }
+
+  /** Spend money on a shelf spot. */
+  buy(spot: ShelfSpot): { ok: true } | { ok: false; reason: string } {
+    if (this.isOwned(spot)) return { ok: false, reason: 'Already owned' };
+    if (gameStore.getState().level < spot.level) return { ok: false, reason: `Unlocks at level ${spot.level}` };
+    if (!spendMoney(SHELF_TYPES[spot.type].cost)) return { ok: false, reason: 'Not enough money' };
+    this.addUnit(spot);
+    haptic([10, 30, 14]);
+    return { ok: true };
   }
 
   /** Call once per frame. */
@@ -281,13 +307,21 @@ export class ShelfManager {
     this.dirty = true;
   }
 
+  /** Ids of the shelf spots the shop owns. */
+  ownedIds(): string[] {
+    return this.units.map((u) => u.spot.id);
+  }
+
   serialize(): Array<{ id: string; productId: string; count: number }> {
     const out: Array<{ id: string; productId: string; count: number }> = [];
     for (const u of this.units) for (const s of u.slots) if (s.productId) out.push({ id: s.id, productId: s.productId, count: s.count });
     return out;
   }
 
-  restore(saved: Array<{ id: string; productId: string; count: number }>): void {
+  restore(saved: Array<{ id: string; productId: string; count: number }>, owned?: string[]): void {
+    // Old saves had every spot: unlock whatever the save mentions.
+    const ids = new Set(owned ?? SHELF_SPOTS.map((sp) => sp.id));
+    for (const sp of SHELF_SPOTS) if (ids.has(sp.id) || saved.some((x) => x.id.startsWith(`${sp.id}:`))) this.addUnit(sp);
     for (const s of saved) {
       const def = PRODUCT_BY_ID[s.productId];
       if (!def) continue;

@@ -87,6 +87,7 @@ const snapshot = (): SaveData => {
     money: st.money,
     xp: st.xp,
     prices: Object.fromEntries(PRODUCTS.filter((p) => p.price !== DEFAULT_PRICE[p.id]).map((p) => [p.id, p.price])),
+    shelfUnits: shelves.ownedIds(),
     shelves: shelves.serialize(),
     villas: villas?.serialize() ?? [],
     boxes: boxes.serialize(),
@@ -98,7 +99,7 @@ if (saved) {
   const xp = Math.max(0, saved.xp ?? 0);
   gameStore.setState({ money: saved.money, xp, level: levelForXp(xp) });
   for (const [id, price] of Object.entries(saved.prices ?? {})) setProductPrice(id, price);
-  shelves.restore(saved.shelves ?? []);
+  shelves.restore(saved.shelves ?? [], saved.shelfUnits);
   villas?.restore(saved.villas ?? []);
   boxes.spawnBoxes(saved.boxes ?? []);
   orders.restore(saved.orders ?? []);
@@ -134,7 +135,7 @@ input.onActionUp(() => interactions.release());
 createSettingsPanel(ui, undefined, resetGame);
 initToasts(ui);
 const hud = createHud(ui);
-createTablet(ui, orders);
+createTablet(ui, orders, shelves);
 createCheckoutPanel(ui, customers);
 if (catTestMode) createShowcasePanel(ui, showcase);
 if (villas) openCatShop = createCatShop(ui, villas);

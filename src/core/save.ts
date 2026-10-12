@@ -8,6 +8,7 @@ export interface SaveData {
   money: number;
   xp: number;
   prices: Record<string, number>;
+  shelfUnits?: string[];
   shelves: Array<{ id: string; productId: string; count: number }>;
   villas: Array<{ id: string; unlocked: boolean; cat: CatData | null }>;
   boxes: Array<{ productId: string; count: number }>;

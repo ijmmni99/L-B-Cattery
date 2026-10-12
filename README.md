@@ -7,7 +7,7 @@ big button or a tap on the crosshair = interact. Settings (gear): graphics, look
 Stocking: pick up a box (it unboxes itself), aim at a shelf slot, **tap** to auto-fill one by one or **hold** to fill only while held.
 Customers: shoppers walk in, pick stocked items, queue at the counter; aim at the register and tap **Checkout** when one is ready (45 s patience).
 Villas: aim at an empty villa → **Choose a cat** to adopt one from the shelter; locked villas can be unlocked with money. Tap a cat to play.
-Economy: sales and adoptions earn XP and levels (unlock products and rarer cats). Set prices in Tablet → Prices. Progress autosaves in the browser (Settings → Reset progress to erase).
+Economy: sales and adoptions earn XP and levels (unlock products and rarer cats). Set prices in Tablet → Prices; buy more shelves in Tablet → Upgrades. Progress autosaves in the browser (Settings → Reset progress to erase).
 Desktop: click to lock the mouse, WASD to move, click / E / Space to interact, Esc to release.
 
 ## Run
