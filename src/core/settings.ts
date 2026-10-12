@@ -6,12 +6,13 @@ export interface Settings {
   lookSensitivity: number;
   headBob: boolean;
   haptics: boolean;
+  sound: boolean;
 }
 
 const STORAGE_KEY = 'lb-settings';
 
 function defaults(): Settings {
-  return { quality: detectDefaultQuality(), lookSensitivity: 1, headBob: false, haptics: true };
+  return { quality: detectDefaultQuality(), lookSensitivity: 1, headBob: false, haptics: true, sound: true };
 }
 
 function load(): Settings {
@@ -26,6 +27,7 @@ function load(): Settings {
         typeof parsed.lookSensitivity === 'number' ? Math.min(Math.max(parsed.lookSensitivity, 0.3), 2) : base.lookSensitivity,
       headBob: typeof parsed.headBob === 'boolean' ? parsed.headBob : base.headBob,
       haptics: typeof parsed.haptics === 'boolean' ? parsed.haptics : base.haptics,
+      sound: typeof parsed.sound === 'boolean' ? parsed.sound : base.sound,
     };
   } catch {
     return base;

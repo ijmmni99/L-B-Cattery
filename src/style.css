@@ -913,3 +913,20 @@ input[type='range'].sens {
 .pill.messy { padding: 5px 12px; font-size: 14px; background: #ffe3d6; }
 .adopt-btn.fire { background: #c0392b; }
 .staff-row .product-sub { max-width: 210px; }
+
+.goal-pill {
+  position: absolute; left: 50%; transform: translateX(-50%); top: calc(12px + var(--safe-top));
+  max-width: min(420px, calc(100vw - 340px)); padding: 8px 16px; border-radius: 999px;
+  background: #fff1c9; box-shadow: var(--shadow); font-weight: 800; font-size: 14px; text-align: center; pointer-events: none !important;
+}
+.goal-pill.hidden { display: none; }
+@media (orientation: portrait) { .goal-pill { top: calc(130px + var(--safe-top)); max-width: calc(100vw - 24px); } }
+#splash { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: var(--cream); transition: opacity 0.4s; }
+#splash.out { opacity: 0; pointer-events: none; }
+#splash div { font-weight: 900; font-size: 26px; color: var(--mint-dark); letter-spacing: 0.5px; animation: splash-bob 1.2s ease-in-out infinite; text-align: center; }
+#splash small { display: block; font-size: 13px; opacity: 0.6; color: var(--ink); margin-top: 6px; }
+@keyframes splash-bob { 50% { transform: translateY(-6px); } }
+.update-toast {
+  position: absolute; left: 50%; bottom: calc(24px + var(--safe-bottom)); transform: translateX(-50%); z-index: 9;
+  padding: 10px 18px; border: 0; border-radius: 999px; background: var(--ink); color: #fff; font: inherit; font-weight: 800; box-shadow: var(--shadow);
+}

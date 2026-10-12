@@ -51,5 +51,5 @@ src/
 - [x] M6 Villas
 - [x] M7 Economy and progression
 - [x] M8 Care, staff and dirt
-- [ ] M9 Polish and PWA
+- [x] M9 Polish and PWA
 - [ ] M10 Asset swap pipeline

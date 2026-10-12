@@ -21,7 +21,7 @@ import { OrderSystem } from './game/orders';
 import { CustomerSystem } from './game/customers';
 import { ShopDoor } from './world/door';
 import { buildCounter } from './world/counter';
-import { gameStore, onPriceChange, setProductPrice } from './game/state';
+import { gameStore, onLevelUp, onPriceChange, setProductPrice } from './game/state';
 import { clearSave, loadSave, resolveLayout, writeSave, type SaveData } from './core/save';
 import { levelForXp } from './config/progression';
 import { DEFAULT_PRICE, PRODUCTS } from './config/products';
@@ -43,6 +43,8 @@ import { MESS } from './config/care';
 import { MessSystem } from './game/mess';
 import { StaffSystem } from './game/staff';
 import { BuildMode } from './game/build-mode';
+import { createGoals } from './ui/goals';
+import { sfx } from './core/sfx';
 import { createBuildBar } from './ui/build-bar';
 import { createCheckoutPanel } from './ui/checkout';
 import { initToasts } from './ui/toast';
@@ -167,6 +169,8 @@ createBuildBar(ui, build, villas !== null, () => undefined);
 if (catTestMode) createShowcasePanel(ui, showcase);
 if (villas) openCatShop = createCatShop(ui, villas);
 const infoCard = createInfoCard(ui);
+const goals = createGoals(ui, { shelves, boxes, orders, customers, villas });
+onLevelUp(() => sfx.levelUp());
 
 const loop = new GameLoop(() => gfx.render());
 loop.add(store.update);
@@ -183,6 +187,8 @@ loop.add((dt) => {
     staff.update(dt);
   }
   hud.setClean(cleanliness());
+  goals.update(dt);
+  goals.setVisible(!build.active);
   const dx = DOOR_INSIDE.x - 0.4;
   door.update(dt, customers.anyNear(dx, DOOR_INSIDE.z, 2.3) || Math.hypot(player.position.x - dx, player.position.z - DOOR_INSIDE.z) < 1.8);
   hud.setDeliveryEta(orders.nextEta);
@@ -220,4 +226,23 @@ if (FpsCounter.enabled()) {
 }
 
 loop.start();
-setupPwa();
+setupPwa(save, ui);
+document.getElementById('splash')?.classList.add('out');
+setTimeout(() => document.getElementById('splash')?.remove(), 600);
+// Stop mobile browsers from showing menus / zoom on long-press and double-tap.
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => e.preventDefault());
+// Keep the screen awake while playing.
+let wake: WakeLockSentinel | null = null;
+const holdScreen = async (): Promise<void> => {
+  try {
+    if (!document.hidden) wake = (await navigator.wakeLock?.request('screen')) ?? null;
+  } catch {
+    wake = null;
+  }
+};
+void holdScreen();
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) void holdScreen();
+});
+void wake;

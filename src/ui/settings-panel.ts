@@ -36,7 +36,9 @@ export function createSettingsPanel(parent: HTMLElement, onOpenChange?: (open: b
         <input type="range" class="sens" min="0.3" max="2" step="0.05" value="${s.lookSensitivity}">
       </label>
       <label class="setting-row toggle-row"><span>Head bob</span><input type="checkbox" class="toggle bob" ${s.headBob ? 'checked' : ''}></label>
+      <label class="setting-row toggle-row"><span>Sound</span><input type="checkbox" class="toggle sound" ${s.sound ? 'checked' : ''}></label>
       <label class="setting-row toggle-row"><span>Vibration</span><input type="checkbox" class="toggle haptics" ${s.haptics ? 'checked' : ''}></label>
+      <button type="button" class="ghost-btn fullscreen-btn">Toggle fullscreen</button>
       <button type="button" class="ghost-btn reset-game">Reset progress</button>
     </div>`;
   parent.appendChild(overlay);
@@ -68,6 +70,13 @@ export function createSettingsPanel(parent: HTMLElement, onOpenChange?: (open: b
   });
   q<HTMLInputElement>('.bob').addEventListener('change', (e) => {
     updateSettings({ headBob: (e.target as HTMLInputElement).checked });
+  });
+  q<HTMLInputElement>('.sound').addEventListener('change', (e) => {
+    updateSettings({ sound: (e.target as HTMLInputElement).checked });
+  });
+  q<HTMLButtonElement>('.fullscreen-btn').addEventListener('click', () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.().catch(() => undefined);
   });
   q<HTMLInputElement>('.haptics').addEventListener('change', (e) => {
     updateSettings({ haptics: (e.target as HTMLInputElement).checked });

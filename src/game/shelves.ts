@@ -3,6 +3,7 @@ import { CATEGORIES, PRODUCT_BY_ID, type ProductDef } from '../config/products';
 import { ITEM_GAP, SHELF_TYPES, SLOT_MAX_ITEMS, type ShelfTypeDef } from '../config/shelves';
 import { cachedGeometry, cachedMaterial } from '../core/cache';
 import { haptic } from '../core/haptics';
+import { sfx } from '../core/sfx';
 import { mergeStatic } from '../core/merge-static';
 import { buildShelfGeometry, type SlotFrame } from '../models/shelf-model';
 import { getProductModel } from '../models/product-factory';
@@ -515,6 +516,7 @@ export class ShelfManager {
     f.slot.popT = 0;
     this.dirty = true;
     this.marker.bump();
+    sfx.pop();
     haptic(7);
   }
 

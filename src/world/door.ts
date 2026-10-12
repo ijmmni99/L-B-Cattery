@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mesh, pastel, roundedBox } from '../core/cache';
+import { sfx } from '../core/sfx';
 import { DOOR, PALETTE } from './layout';
 import { glassMaterial, WALL_X } from './storefront';
 
@@ -9,6 +10,7 @@ const OPEN_ANGLE = 1.75;
 export class ShopDoor {
   readonly group = new THREE.Group();
   private open = 0;
+  private wasNear = false;
 
   constructor() {
     const { zMin, zMax, height } = DOOR;
@@ -41,6 +43,8 @@ export class ShopDoor {
 
   /** `near` = someone is at the door. */
   update(dt: number, near: boolean): void {
+    if (near && this.open < 0.02 && !this.wasNear) sfx.chime();
+    this.wasNear = near;
     const target = near ? 1 : 0;
     this.open += Math.sign(target - this.open) * Math.min(Math.abs(target - this.open), dt * 2.2);
     const e = this.open * this.open * (3 - 2 * this.open);

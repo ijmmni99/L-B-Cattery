@@ -1,7 +1,10 @@
+import { getSettings } from './settings';
+
 let ctx: AudioContext | null = null;
 
 /** Short synthesized blip (no audio files). Silently does nothing if audio is unavailable. */
 export function blip(freq: number, seconds = 0.08, type: OscillatorType = 'square', gain = 0.05, delay = 0): void {
+  if (!getSettings().sound) return;
   try {
     ctx ??= new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();
@@ -33,4 +36,12 @@ export const sfx = {
     blip(1318, 0.22, 'triangle', 0.07, 0.2);
   },
   error: (): void => blip(160, 0.22, 'sawtooth', 0.06),
+  pop: (): void => blip(480 + Math.random() * 120, 0.05, 'sine', 0.05),
+  chime: (): void => {
+    blip(1046, 0.12, 'triangle', 0.05);
+    blip(1318, 0.2, 'triangle', 0.05, 0.1);
+  },
+  levelUp: (): void => {
+    [523, 659, 784, 1046].forEach((f, i) => blip(f, 0.16, 'triangle', 0.07, i * 0.1));
+  },
 };
