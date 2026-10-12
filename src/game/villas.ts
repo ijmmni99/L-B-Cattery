@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { toast } from '../ui/toast';
 import { BREED_BY_ID, RARITIES } from '../config/cats';
+import { CARE } from '../config/care';
 import { ADOPTION_FACTOR } from '../config/progression';
 import { VILLA_SIZE, VILLA_TINTS, type VillaSpot } from '../config/villas';
 import { haptic } from '../core/haptics';
@@ -21,6 +23,12 @@ export class Villa {
   catItem: Interactable | null = null;
   item: Interactable | null = null;
   colliderId = -1;
+  /** 1 = fully fed / entertained. */
+  needs = { food: 1, fun: 1 };
+  /** 0 = clean litter tray, 1 = overflowing. */
+  dirt = 0;
+  private needyTimer = 8 + Math.random() * 10;
+  litterItem: Interactable | null = null;
   readonly model: VillaModel;
   /** Identity wrapper holding the merged frame; `group` carries the transform. */
   readonly root = new THREE.Group();
@@ -32,7 +40,7 @@ export class Villa {
     this.model = buildVilla(tint);
     this.group.position.set(spot.x, 0, spot.z);
     this.group.rotation.y = spot.yaw;
-    this.group.add(this.model.frame, this.model.plate, this.model.proxy);
+    this.group.add(this.model.frame, this.model.plate, this.model.proxy, this.model.litterProxy, ...this.model.poops);
     this.root.add(this.group);
     this.root.updateMatrixWorld(true);
     this.root.add(mergeStatic(this.root));
@@ -44,6 +52,29 @@ export class Villa {
     this.pickBox.position.set(spot.x, 0.8, spot.z);
     this.pickBox.rotation.y = spot.yaw;
     this.pickBox.updateMatrixWorld(true);
+  }
+
+  /** 0..1: how content the cat is (food, play and a clean tray). */
+  get mood(): number {
+    return (this.needs.food + this.needs.fun + (1 - this.dirt)) / 3;
+  }
+
+  /** Per-frame needs decay, litter visuals, and the cat asking for things. */
+  tick(dt: number): void {
+    if (!this.cat) return;
+    this.needs.food = Math.max(0, this.needs.food - CARE.foodDecay * dt);
+    this.needs.fun = Math.max(0, this.needs.fun - CARE.funDecay * dt);
+    this.dirt = Math.min(1, this.dirt + CARE.dirtGrow * dt);
+    CARE.litterSteps.forEach((at, i) => {
+      this.model.poops[i].visible = this.dirt >= at;
+    });
+    this.needyTimer -= dt;
+    if (this.needyTimer <= 0) {
+      this.needyTimer = 14 + Math.random() * 10;
+      if (this.needs.food < CARE.hungryBelow) this.cat.bubble.show('🍽️');
+      else if (this.dirt > 0.8) this.cat.bubble.show('💩');
+      else if (this.needs.fun < CARE.funBelow) this.cat.bubble.show('🧶');
+    }
   }
 
   /** Floor spot in front of the villa where a visitor stands to look at its cat. */
@@ -72,9 +103,16 @@ export class VillaManager {
     scene.add(this.root, this.pickables);
   }
 
-  static adoptionFee(cat: CatData): number {
-    return Math.round(catValue(cat) * ADOPTION_FACTOR);
+  /** Adoption fee: the cat's value, scaled by how well it is cared for. */
+  static adoptionFee(villa: Villa): number {
+    const cat = villa.cat;
+    if (!cat) return 0;
+    return Math.round(catValue(cat.data) * ADOPTION_FACTOR * (CARE.feeMin + CARE.feeRange * villa.mood));
   }
+
+  /** Set by main: take one unit of cat food from the shelves (null when there is none). */
+  takeFood: () => string | null = () => null;
+  hasFood: () => boolean = () => false;
 
   /** Footprint after rotation, for collisions. */
   static footprint(yaw: number): { w: number; d: number } {
@@ -84,7 +122,7 @@ export class VillaManager {
     return alongX ? { w, d } : { w: d, d: w };
   }
 
-  addVilla(spot: VillaSpot, cat: CatData | null = null): Villa {
+  addVilla(spot: VillaSpot, cat: CatData | null = null, state?: { needs?: { food: number; fun: number }; dirt?: number }): Villa {
     const villa = new Villa(spot, VILLA_TINTS[this.tintIndex++ % VILLA_TINTS.length]);
     this.villas.push(villa);
     this.root.add(villa.root);
@@ -94,6 +132,8 @@ export class VillaManager {
     villa.colliderId = this.colliders.addCentered(spot.x, spot.z, fp.w, fp.d);
     this.register(villa);
     if (cat) this.assignCat(villa, cat, false);
+    if (state?.needs) villa.needs = { ...state.needs };
+    if (state?.dirt) villa.dirt = state.dirt;
     return villa;
   }
 
@@ -105,6 +145,7 @@ export class VillaManager {
     villa.cat?.group.removeFromParent();
     if (villa.item) this.interactions.remove(villa.item);
     if (villa.catItem) this.interactions.remove(villa.catItem);
+    if (villa.litterItem) this.interactions.remove(villa.litterItem);
     this.colliders.remove(villa.colliderId);
     villa.root.removeFromParent();
     villa.pickBox.removeFromParent();
@@ -129,8 +170,35 @@ export class VillaManager {
     villa.model.setLabel(EMPTY_LABEL);
   }
 
-  serialize(): Array<{ id: string; cat: CatData | null }> {
-    return this.villas.map((v) => ({ id: v.spot.id, cat: v.cat?.data ?? null }));
+  serialize(): Array<{ id: string; cat: CatData | null; needs?: { food: number; fun: number }; dirt?: number }> {
+    return this.villas.map((v) => ({ id: v.spot.id, cat: v.cat?.data ?? null, needs: { ...v.needs }, dirt: v.dirt }));
+  }
+
+  /** Feed the cat from shelf stock. Returns false (and says why) if there is no food. */
+  feed(villa: Villa, silent = false): boolean {
+    if (!villa.cat) return false;
+    const food = this.takeFood();
+    if (!food) {
+      if (!silent) toast('Stock some cat food on a shelf first', 'bad');
+      return false;
+    }
+    villa.needs.food = 1;
+    villa.cat.eat();
+    haptic([8, 20, 8]);
+    return true;
+  }
+
+  play(villa: Villa, gain: number = CARE.playGain): void {
+    if (!villa.cat) return;
+    villa.needs.fun = Math.min(1, villa.needs.fun + gain);
+    villa.cat.play();
+    haptic([12, 40, 12]);
+  }
+
+  cleanLitter(villa: Villa): void {
+    villa.dirt = 0;
+    for (const p of villa.model.poops) p.visible = false;
+    haptic(10);
   }
 
   get catCount(): number {
@@ -138,7 +206,10 @@ export class VillaManager {
   }
 
   update(dt: number): void {
-    for (const v of this.villas) v.cat?.update(dt);
+    for (const v of this.villas) {
+      v.cat?.update(dt);
+      v.tick(dt);
+    }
   }
 
   /** Moves a cat into a villa. */
@@ -149,7 +220,7 @@ export class VillaManager {
     this.root.add(cat.group);
     villa.model.setLabel(data.name);
     if (announce) cat.meow();
-    villa.catItem = this.addCatInteraction(cat);
+    villa.catItem = this.addCatInteraction(villa, cat);
   }
 
   private register(villa: Villa): void {
@@ -163,29 +234,35 @@ export class VillaManager {
     };
     villa.item = item;
     this.interactions.add(item);
+    const litter: Interactable = {
+      position: villa.group.position,
+      object: villa.model.litterProxy,
+      label: () => (villa.cat && villa.dirt > CARE.litterSteps[0] ? 'Clean litter' : null),
+      act: () => this.cleanLitter(villa),
+      info: () => ({ key: `litter:${villa.spot.id}:${Math.round(villa.dirt * 10)}`, title: 'Litter tray', sub: villa.dirt > 0.8 ? 'Needs cleaning!' : 'Getting dirty', tag: '💩' }),
+    };
+    villa.litterItem = litter;
+    this.interactions.add(litter);
   }
 
-  private addCatInteraction(cat: CatEntity): Interactable {
+  private addCatInteraction(villa: Villa, cat: CatEntity): Interactable {
     const item: Interactable = {
       position: cat.position,
       object: cat.hitProxy,
       highlight: cat.model.mesh,
-      label: () => 'Play',
+      label: () => (villa.needs.food < CARE.feedBelow && this.hasFood() ? 'Feed' : 'Play'),
       info: () => {
         const breed = BREED_BY_ID[cat.data.appearance.breedId];
         const r = RARITIES[cat.data.rarity];
         return {
-          key: cat.data.id,
+          key: `${cat.data.id}:${Math.round(villa.needs.food * 10)}:${Math.round(villa.needs.fun * 10)}:${Math.round(villa.dirt * 10)}`,
           title: cat.data.name,
           badge: { text: r.label, color: r.color },
           sub: `${breed?.name ?? ''} · ${breed?.coats[cat.data.appearance.coatIndex]?.name ?? ''}`,
-          tag: `${cat.data.personality} · adoption $${VillaManager.adoptionFee(cat.data)}`,
+          tag: `🍽️${Math.round(villa.needs.food * 100)}% 🧶${Math.round(villa.needs.fun * 100)}% · $${VillaManager.adoptionFee(villa)}`,
         };
       },
-      act: () => {
-        cat.play();
-        haptic([12, 40, 12]);
-      },
+      act: () => (villa.needs.food < CARE.feedBelow && this.hasFood() ? this.feed(villa) : this.play(villa)),
     };
     this.interactions.add(item);
     return item;

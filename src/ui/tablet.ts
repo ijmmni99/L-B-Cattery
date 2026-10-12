@@ -1,6 +1,8 @@
 import { CATEGORIES, PRODUCTS, PRODUCT_BY_ID, boxCost, type ProductDef } from '../config/products';
 import { haptic } from '../core/haptics';
 import { OrderSystem } from '../game/orders';
+import type { StaffSystem } from '../game/staff';
+import { STAFF, WAGE_INTERVAL } from '../config/care';
 import { DELIVERY_SECONDS, gameStore, onPriceChange, setProductPrice } from '../game/state';
 import { DEFAULT_PRICE } from '../config/products';
 import { toast } from './toast';
@@ -11,7 +13,7 @@ const TABS: Array<{ id: string; label: string; ready: boolean }> = [
   { id: 'supplies', label: 'Supplies', ready: true },
   { id: 'cats', label: 'Cats', ready: false },
   { id: 'prices', label: 'Prices', ready: true },
-  { id: 'staff', label: 'Staff', ready: false },
+  { id: 'staff', label: 'Staff', ready: true },
 ];
 
 const fmt = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(2));
@@ -20,7 +22,7 @@ const fmt = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(
  * Tablet: order supplies by the box. Other tabs arrive with later milestones.
  * Opens from the HUD button or the T key.
  */
-export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenChange?: (open: boolean) => void): { open(): void; close(): void } {
+export function createTablet(parent: HTMLElement, orders: OrderSystem, staff: StaffSystem, onOpenChange?: (open: boolean) => void): { open(): void; close(): void } {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'hud-icon-button tablet-button';
@@ -41,6 +43,7 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
       <div class="tabs">${TABS.map((t) => `<button type="button" class="tab${t.id === 'supplies' ? ' active' : ''}${t.ready ? '' : ' soon'}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>
       <div class="tab-body supplies-body"></div>
       <div class="tab-body prices-body" hidden></div>
+      <div class="tab-body staff-body" hidden></div>
       <div class="tab-body soon-body" hidden><p>Coming soon!</p></div>
       <div class="order-bar">
         <div class="order-total"><span>Total</span><b class="order-total-value">$0</b><small>Delivery in ~${DELIVERY_SECONDS}s</small></div>
@@ -115,6 +118,46 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
   onPriceChange(renderPrices);
   renderPrices();
 
+  const staffBody = q<HTMLElement>('.staff-body');
+  const renderStaff = (): void => {
+    const level = gameStore.getState().level;
+    const money = gameStore.getState().money;
+    staffBody.innerHTML =
+      `<p class="hint">Helpers are paid every ${WAGE_INTERVAL}s. If you can't pay, they quit.</p>` +
+      STAFF.map((d) => {
+        const hired = staff.has(d.role);
+        const locked = level < d.hireLevel;
+        const fee = staff.hireCost(d.role);
+        const action = hired
+          ? `<button type="button" class="adopt-btn fire" data-role="${d.role}" data-do="fire">Fire</button>`
+          : `<button type="button" class="adopt-btn" data-role="${d.role}" data-do="hire" ${locked || money < fee ? 'disabled' : ''}>${locked ? `🔒 Lv ${d.hireLevel}` : `Hire $${fee}`}</button>`;
+        return `<div class="product-row staff-row">
+          <div class="product-icon" style="background:${d.apron}">${d.icon}</div>
+          <div class="product-info">
+            <div class="product-name">${d.name}${hired ? ' ✓' : ''}</div>
+            <div class="product-sub">${d.desc}</div>
+            <div class="product-price">$${d.wage} / ${WAGE_INTERVAL}s</div>
+          </div>
+          ${action}
+        </div>`;
+      }).join('');
+  };
+  staffBody.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-do]');
+    if (!btn) return;
+    const role = btn.dataset.role as 'cashier' | 'cleaner' | 'caretaker';
+    if (btn.dataset.do === 'fire') staff.fire(role);
+    else {
+      const res = staff.hire(role);
+      if (res.ok) toast('Hired!', 'good');
+      else toast(res.reason, 'bad');
+    }
+    renderStaff();
+  });
+  gameStore.subscribe(() => {
+    if (!staffBody.hidden) renderStaff();
+  });
+
   const lines = (): Record<string, number> => Object.fromEntries([...qty].filter(([, n]) => n > 0));
   const refresh = (): void => {
     const total = OrderSystem.total(lines());
@@ -164,9 +207,11 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
       const id = tab.dataset.tab;
       body.hidden = id !== 'supplies';
       pricesBody.hidden = id !== 'prices';
-      soonBody.hidden = id === 'supplies' || id === 'prices';
+      staffBody.hidden = id !== 'staff';
+      soonBody.hidden = id === 'supplies' || id === 'prices' || id === 'staff';
       (overlay.querySelector('.order-bar') as HTMLElement).hidden = id !== 'supplies';
       if (id === 'prices') renderPrices();
+      if (id === 'staff') renderStaff();
     });
   }
 

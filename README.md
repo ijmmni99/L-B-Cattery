@@ -8,6 +8,7 @@ Stocking: pick up a box (it unboxes itself), aim at a shelf slot, **tap** to aut
 Customers: shoppers walk in, pick stocked items, queue at the counter; aim at the register and tap **Checkout** when one is ready (45 s patience).
 Build mode (hammer button or **B**): buy shelves, benches and villas and place them anywhere; Move and Sell tools; the ghost turns red if it would block customers. Villas are expensive (each costs more than the last). Aim at an empty villa → **Choose a cat**; tap a cat to play.
 Economy: sales and adoptions earn XP and levels (unlock products and rarer cats). Set prices in Tablet → Prices. Progress autosaves in the browser (Settings → Reset progress to erase).
+Care: cats get hungry, bored and dirty. Aim at a cat to **Feed** (uses cat food from a shelf) or **Play**, and at the litter tray to **Clean litter**. Happy, clean cats adopt for more. Customers leave messes you can **Clean up**; a messy shop gets fewer visitors. Hire a Cashier, Cleaner or Caretaker in Tablet → Staff (paid every minute).
 Desktop: click to lock the mouse, WASD to move, click / E / Space to interact, Esc to release.
 
 ## Run
@@ -49,6 +50,6 @@ src/
 - [x] M5 Customers and checkout
 - [x] M6 Villas
 - [x] M7 Economy and progression
-- [ ] M8 Care, staff and dirt
+- [x] M8 Care, staff and dirt
 - [ ] M9 Polish and PWA
 - [ ] M10 Asset swap pipeline

@@ -92,6 +92,12 @@ export class CatEntity {
     this.meow();
   }
 
+  /** Mealtime: a short eating session. */
+  eat(): void {
+    this.behavior.interrupt('eat', this.position, 5);
+    this.animator.play('eat');
+  }
+
   meow(): void {
     this.bubble.show();
     this.animator.meow();

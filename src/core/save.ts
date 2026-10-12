@@ -15,7 +15,8 @@ export interface SaveData {
   shelfUnits?: string[];
   layout?: { shelves: ShelfSpot[]; villas: VillaSpot[] };
   shelves: Array<{ id: string; productId: string; count: number }>;
-  villas: Array<{ id: string; unlocked?: boolean; cat: CatData | null }>;
+  villas: Array<{ id: string; unlocked?: boolean; cat: CatData | null; needs?: { food: number; fun: number }; dirt?: number }>;
+  staff?: string[];
   boxes: Array<{ productId: string; count: number }>;
   orders: PendingOrder[];
 }

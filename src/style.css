@@ -910,3 +910,6 @@ input[type='range'].sens {
 @media (orientation: portrait) {
   .build-bar { top: calc(130px + var(--safe-top)); width: calc(100vw - 24px); }
 }
+.pill.messy { padding: 5px 12px; font-size: 14px; background: #ffe3d6; }
+.adopt-btn.fire { background: #c0392b; }
+.staff-row .product-sub { max-width: 210px; }

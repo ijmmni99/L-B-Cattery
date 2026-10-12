@@ -39,6 +39,9 @@ import { createShowcasePanel } from './ui/cat-showcase-ui';
 import { createInfoCard } from './ui/info-card';
 import { createHud } from './ui/hud';
 import { createTablet } from './ui/tablet';
+import { MESS } from './config/care';
+import { MessSystem } from './game/mess';
+import { StaffSystem } from './game/staff';
 import { BuildMode } from './game/build-mode';
 import { createBuildBar } from './ui/build-bar';
 import { createCheckoutPanel } from './ui/checkout';
@@ -79,7 +82,14 @@ const catTestMode = new URLSearchParams(location.search).get('cats') === '1';
 const showcase = new CatShowcase(gfx.scene, interactions, colliders, catTestMode);
 let openCatShop: (villa: Villa) => void = () => undefined;
 const villas = catTestMode ? null : new VillaManager(gfx.scene, colliders, interactions, (v) => openCatShop(v));
-const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter, colliders, player.position, villas);
+const mess = new MessSystem(gfx.scene, interactions);
+const cleanliness = (): number => {
+  const cats = villas?.villas.filter((v) => v.cat) ?? [];
+  const dirt = cats.length ? cats.reduce((n, v) => n + v.dirt, 0) / cats.length : 0;
+  return Math.max(0, Math.min(1, 1 - mess.count * MESS.perMess - dirt * MESS.perVillaDirt));
+};
+const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter, colliders, player.position, villas, mess, cleanliness);
+const staff = new StaffSystem(gfx.scene, customers.nav, customers, mess, villas);
 
 // ---- Save / load (localStorage). Restored before the first frame.
 const snapshot = (): SaveData => {
@@ -94,13 +104,18 @@ const snapshot = (): SaveData => {
     villas: villas?.serialize() ?? [],
     boxes: boxes.serialize(),
     orders: orders.serialize(),
+    staff: staff.roles(),
   };
 };
 const saved = loadSave();
 const layout = resolveLayout(saved);
 for (const spot of layout.shelves) shelves.addUnit(spot);
-const savedCats = new Map((saved?.villas ?? []).map((v) => [v.id, v.cat]));
-for (const spot of layout.villas) villas?.addVilla(spot, savedCats.get(spot.id) ?? null);
+const savedVillas = new Map((saved?.villas ?? []).map((v) => [v.id, v]));
+if (villas) {
+  villas.takeFood = () => shelves.takeFood();
+  villas.hasFood = () => shelves.hasFood();
+}
+for (const spot of layout.villas) villas?.addVilla(spot, savedVillas.get(spot.id)?.cat ?? null, savedVillas.get(spot.id));
 if (saved) {
   const xp = Math.max(0, saved.xp ?? 0);
   gameStore.setState({ money: saved.money, xp, level: levelForXp(xp) });
@@ -108,6 +123,7 @@ if (saved) {
   shelves.restore(saved.shelves ?? []);
   boxes.spawnBoxes(saved.boxes ?? []);
   orders.restore(saved.orders ?? []);
+  for (const r of saved.staff ?? []) if (r === 'cashier' || r === 'cleaner' || r === 'caretaker') staff.hire(r, true);
 }
 onPriceChange(() => shelves.markDirty());
 let resetting = false;
@@ -145,7 +161,7 @@ input.onActionUp(() => !build.active && interactions.release());
 createSettingsPanel(ui, undefined, resetGame);
 initToasts(ui);
 const hud = createHud(ui);
-createTablet(ui, orders);
+createTablet(ui, orders, staff);
 createCheckoutPanel(ui, customers);
 createBuildBar(ui, build, villas !== null, () => undefined);
 if (catTestMode) createShowcasePanel(ui, showcase);
@@ -162,7 +178,11 @@ loop.add((dt) => {
   orders.update(dt);
   boxes.update(dt);
   shelves.update(dt);
-  if (!build.active) customers.update(dt); // the shop is paused while building
+  if (!build.active) {
+    customers.update(dt); // the shop is paused while building
+    staff.update(dt);
+  }
+  hud.setClean(cleanliness());
   const dx = DOOR_INSIDE.x - 0.4;
   door.update(dt, customers.anyNear(dx, DOOR_INSIDE.z, 2.3) || Math.hypot(player.position.x - dx, player.position.z - DOOR_INSIDE.z) < 1.8);
   hud.setDeliveryEta(orders.nextEta);
@@ -194,7 +214,7 @@ loop.add((dt) => {
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, build, snapshot, gameStore, products: PRODUCT_BY_ID };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, build, staff, mess, snapshot, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

@@ -1,6 +1,8 @@
 import { gameStore, levelProgress } from '../game/state';
 
 export interface Hud {
+  /** 0..1 shop cleanliness; the pill only shows when it is low. */
+  setClean(value: number): void;
   /** Seconds until the next delivery (null = none on the way). */
   setDeliveryEta(eta: number | null): void;
 }
@@ -14,15 +16,18 @@ export function createHud(parent: HTMLElement): Hud {
   el.innerHTML = `
     <div class="pill money"><span class="coin">$</span><span class="money-value"></span></div>
     <div class="pill level"><span class="lvl"></span><span class="xpbar"><i></i></span></div>
+    <div class="pill messy hidden"><span>🧹</span><span class="messy-text"></span></div>
     <div class="pill delivery hidden"><span>📦</span><span class="delivery-text"></span></div>`;
   parent.appendChild(el);
   const money = el.querySelector<HTMLElement>('.money');
   const value = el.querySelector<HTMLElement>('.money-value');
   const lvl = el.querySelector<HTMLElement>('.lvl');
   const bar = el.querySelector<HTMLElement>('.xpbar i');
+  const messy = el.querySelector<HTMLElement>('.messy');
+  const messyText = el.querySelector<HTMLElement>('.messy-text');
   const delivery = el.querySelector<HTMLElement>('.delivery');
   const deliveryText = el.querySelector<HTMLElement>('.delivery-text');
-  if (!lvl || !bar || !money || !value || !delivery || !deliveryText) throw new Error('hud markup');
+  if (!messy || !messyText || !lvl || !bar || !money || !value || !delivery || !deliveryText) throw new Error('hud markup');
 
   let last = gameStore.getState().money;
   const render = (): void => {
@@ -42,7 +47,15 @@ export function createHud(parent: HTMLElement): Hud {
   render();
 
   let shown: string | null = null;
+  let cleanShown = -1;
   return {
+    setClean(value) {
+      const pct = Math.round(value * 100);
+      if (pct === cleanShown) return;
+      cleanShown = pct;
+      messy.classList.toggle('hidden', value >= 0.8);
+      messyText.textContent = `Shop ${pct}% clean`;
+    },
     setDeliveryEta(eta) {
       const text = eta === null ? null : `Delivery in ${Math.max(1, Math.ceil(eta))}s`;
       if (text === shown) return;

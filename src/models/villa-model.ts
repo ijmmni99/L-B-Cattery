@@ -30,6 +30,10 @@ export interface VillaModel {
   /** Name plate; call `setLabel`. */
   plate: THREE.Mesh;
   setLabel(text: string): void;
+  /** Litter-tray messes, shown by dirt level (dynamic meshes). */
+  poops: THREE.Mesh[];
+  /** Hit box on the tray for the "Clean litter" action. */
+  litterProxy: THREE.Mesh;
   /** Invisible box covering the whole villa for the "choose a cat" ray. */
   proxy: THREE.Mesh;
 }
@@ -81,6 +85,32 @@ export function buildVilla(tint: string): VillaModel {
   postTop.position.set(0.6, P + 0.66, -0.42);
   frame.add(bed, bedDip, postBase, postPole, postTop);
 
+  // Litter tray (front right) with dynamic messes.
+  const tray = mesh(roundedBox(0.4, 0.07, 0.3, 0.025), pastel('#9fb8d6', 0.7));
+  tray.position.set(0.62, P + 0.035, 0.38);
+  const litter = mesh(roundedBox(0.34, 0.02, 0.24, 0.01), pastel('#f2e6c9', 0.95), { cast: false });
+  litter.position.set(0.62, P + 0.07, 0.38);
+  frame.add(tray, litter);
+  const poopGeo = cachedGeometry('villa-poop', () => new THREE.SphereGeometry(0.035, 8, 6));
+  const poops = [
+    [0.54, 0.34],
+    [0.68, 0.42],
+    [0.6, 0.46],
+  ].map(([x, z]) => {
+    const m = new THREE.Mesh(poopGeo, pastel('#7a5230', 0.9));
+    m.position.set(x, P + 0.1, z);
+    m.scale.set(1.3, 0.8, 1);
+    m.userData.dynamic = true;
+    m.visible = false;
+    return m;
+  });
+  const litterProxy = new THREE.Mesh(
+    cachedGeometry('villa-litter-proxy', () => new THREE.BoxGeometry(0.46, 0.3, 0.36)),
+    cachedMaterial('villa-proxy', () => new THREE.MeshBasicMaterial({ visible: false })),
+  );
+  litterProxy.position.set(0.62, P + 0.15, 0.38);
+  litterProxy.userData.dynamic = true;
+
   const plate = new THREE.Mesh(cachedGeometry('villa-plate', () => new THREE.PlaneGeometry(1.0, 0.25)), labelMaterial('Empty'));
   plate.position.set(0, HEADER_Y + P - 0.1, D / 2 - 0.015);
   plate.userData.dynamic = true;
@@ -94,6 +124,8 @@ export function buildVilla(tint: string): VillaModel {
 
   return {
     frame,
+    poops,
+    litterProxy,
     plate,
     proxy,
     setLabel: (text) => {

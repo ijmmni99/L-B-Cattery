@@ -8,7 +8,9 @@ import type { CheckoutCounter } from '../world/counter';
 import type { CollisionWorld } from '../world/colliders';
 import { DOOR_INSIDE, DOOR_OUTSIDE, QUEUE, STORE } from '../world/layout';
 import { toast } from '../ui/toast';
+import { MESS } from '../config/care';
 import { Customer } from './customer';
+import type { MessSystem } from './mess';
 import type { InfoCardData, Interactable, InteractionSystem } from './interactions';
 import type { ShelfManager } from './shelves';
 import { addMoney, addXp } from './state';
@@ -48,6 +50,9 @@ export class CustomerSystem {
     colliders: CollisionWorld,
     private readonly playerPos: THREE.Vector3,
     private readonly villas: VillaManager | null = null,
+    private readonly mess: MessSystem | null = null,
+    /** 0..1; a dirty shop gets fewer visitors. */
+    private readonly cleanliness: () => number = () => 1,
   ) {
     this.nav = new NavGrid(colliders, STORE.minX, STORE.minZ, STORE.maxX, STORE.maxZ);
     const item: Interactable = {
@@ -80,7 +85,7 @@ export class CustomerSystem {
   update(dt: number): void {
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      this.spawnTimer = rand(CUSTOMERS.spawnMin, CUSTOMERS.spawnMax);
+      this.spawnTimer = rand(CUSTOMERS.spawnMin, CUSTOMERS.spawnMax) / (0.4 + 0.6 * this.cleanliness());
       if (this.customers.length < CUSTOMERS.maxInStore && (this.shelves.stockedSlots().length > 0 || (this.villas?.adoptable().length ?? 0) > 0)) this.spawn();
     }
 
@@ -89,6 +94,7 @@ export class CustomerSystem {
       c.update(dt, ANCHOR);
       this.yieldTo(c, dt);
       this.think(c, dt);
+      this.maybeLitter(c, dt);
       if (c.stage === 'leaving' && c.idle) {
         this.scene.remove(c.root, c.bubble.sprite);
         this.customers.splice(i, 1);
@@ -98,6 +104,15 @@ export class CustomerSystem {
   }
 
   // ----------------------------------------------------------------- behaviour
+
+  /** Shoppers occasionally drop some litter while walking around. */
+  private maybeLitter(c: Customer, dt: number): void {
+    if (!this.mess || c.stage === 'leaving' || c.position.x < STORE.minX + 1.2) return;
+    c.messTimer -= dt;
+    if (c.messTimer > 0) return;
+    c.messTimer = rand(MESS.dropMin, MESS.dropMax);
+    if (c.moving) this.mess.drop(c.position.x, c.position.z);
+  }
 
   private spawn(): void {
     const slots = this.shelves.stockedSlots();
@@ -161,7 +176,7 @@ export class CustomerSystem {
         if (wish?.kind === 'villa') {
           const cat = wish.villa.removed ? null : wish.villa.cat;
           if (cat) {
-            c.addAdoption(wish.villa, cat.data.name, VillaManager.adoptionFee(cat.data));
+            c.addAdoption(wish.villa, cat.data.name, VillaManager.adoptionFee(wish.villa));
             cat.meow();
           } else {
             wish.villa.reserved = false;

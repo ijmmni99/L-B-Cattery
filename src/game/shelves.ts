@@ -318,6 +318,20 @@ export class ShelfManager {
     return out;
   }
 
+  /** True if any shelf holds cat food. */
+  hasFood(): boolean {
+    return this.units.some((u) => u.slots.some((s) => s.count > 0 && s.def?.category === 'food'));
+  }
+
+  /** Takes one unit of cat food from the shelves (the cheapest first); null if none. */
+  takeFood(): string | null {
+    let best: ShelfSlot | null = null;
+    for (const u of this.units) for (const s of u.slots) if (s.count > 0 && s.def?.category === 'food' && (!best || s.def.price < (best.def?.price ?? 99))) best = s;
+    if (!best) return null;
+    this.sell(best, 1);
+    return best.def?.id ?? null;
+  }
+
   /** Floor spot in front of a slot where a customer stands to browse it. */
   standPoint(slot: ShelfSlot, out: THREE.Vector3): THREE.Vector3 {
     const yaw = slot.unit.spot.yaw;
