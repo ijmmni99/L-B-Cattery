@@ -9,6 +9,7 @@ import { getProductModel } from '../models/product-factory';
 import type { CollisionWorld } from '../world/colliders';
 import { SHELF_SPOTS, type ShelfSpot } from '../world/shelf-layout';
 import type { Box, BoxManager } from './boxes';
+import { PriceTagLayer } from './price-tags';
 import { NO_OUTLINE, type InfoCardData, type Interactable, type InteractionSystem } from './interactions';
 
 const MAX_INSTANCES = 700;
@@ -18,8 +19,8 @@ const Q = new THREE.Quaternion();
 const V = new THREE.Vector3();
 const S = new THREE.Vector3();
 
-/** Press shorter than this = a tap (auto-fill); longer = fill only while held. */
-const TAP_SECONDS = 0.28;
+/** Tap places one item; holding past this delay auto-fills one by one until released. */
+const HOLD_DELAY = 0.32;
 const FLIGHT_SECONDS = 0.24;
 const START_INTERVAL = 0.16;
 const MIN_INTERVAL = 0.055;
@@ -181,9 +182,6 @@ interface Flight {
 interface Session {
   slot: ShelfSlot;
   box: Box;
-  holding: boolean;
-  /** A tap was released early: keep going until done. */
-  auto: boolean;
   timer: number;
   streak: number;
 }
@@ -192,7 +190,7 @@ const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3);
 
 /**
  * All shelf units: static frames (merged), per-product instanced items,
- * and satisfying stocking: tap = auto-fill one by one, hold = fill while held.
+ * and satisfying stocking: tap = place one, hold = auto-fill one by one.
  */
 export class ShelfManager {
   readonly units: ShelfUnit[] = [];
@@ -200,6 +198,7 @@ export class ShelfManager {
   readonly itemsRoot = new THREE.Group();
   private readonly instanced = new Map<string, THREE.InstancedMesh>();
   private readonly marker = new SlotMarker();
+  private readonly tags = new PriceTagLayer();
   private readonly flights: Flight[] = [];
   private readonly pool = new Map<string, THREE.Mesh[]>();
   private session: Session | null = null;
@@ -227,7 +226,7 @@ export class ShelfManager {
     }
     // Collapse the static frames into a handful of draw calls.
     frames.add(mergeStatic(frames));
-    scene.add(frames, proxies, this.itemsRoot, this.marker.mesh);
+    scene.add(frames, proxies, this.itemsRoot, this.tags.root, this.marker.mesh);
   }
 
   /** Call once per frame. */
@@ -264,7 +263,7 @@ export class ShelfManager {
       label: () => this.labelFor(slot),
       act: () => undefined,
       onPress: () => this.press(slot),
-      onRelease: (held) => this.release(slot, held),
+      onRelease: () => this.release(slot),
       onCancel: () => this.endSession(false),
       info: () => this.infoFor(slot),
       onFocus: () => this.marker.show(slot),
@@ -292,7 +291,7 @@ export class ShelfManager {
     const box = this.boxes.carried;
     if (box) {
       if (!this.canStock(slot)) return;
-      this.session = { slot, box, holding: true, auto: false, timer: START_INTERVAL, streak: 0 };
+      this.session = { slot, box, timer: HOLD_DELAY, streak: 0 };
       this.launch(this.session); // first item leaves instantly so it feels responsive
       return;
     }
@@ -307,13 +306,8 @@ export class ShelfManager {
     }
   }
 
-  private release(slot: ShelfSlot, held: number): void {
-    const s = this.session;
-    if (!s || s.slot !== slot) return;
-    s.holding = false;
-    // A quick tap keeps filling by itself; a real hold stops on release.
-    if (held < TAP_SECONDS) s.auto = true;
-    else this.endSession(false);
+  private release(slot: ShelfSlot): void {
+    if (this.session?.slot === slot) this.endSession(false);
   }
 
   private endSession(done: boolean): void {
@@ -328,7 +322,6 @@ export class ShelfManager {
   private updateSession(dt: number): void {
     const s = this.session;
     if (!s) return;
-    if (!s.holding && !s.auto) return this.endSession(false);
     s.timer -= dt;
     while (s.timer <= 0) {
       const stillCarrying = this.boxes.carried === s.box && s.box.count > 0;
@@ -353,6 +346,7 @@ export class ShelfManager {
     const index = slot.committed;
     slot.inflight++;
     s.streak++;
+    this.dirty = true;
 
     const mesh = this.takeFlyer(def);
     const from = this.boxes.handsOrigin(new THREE.Vector3());
@@ -418,18 +412,25 @@ export class ShelfManager {
     if (def) {
       const cap = slot.capacityFor(def);
       const cat = CATEGORIES.find((c) => c.id === def.category);
-      return { key: `slot:${slot.id}:${slot.count}:${box?.productId ?? ''}`, title: def.name, sub: `${slot.count} / ${cap} on shelf`, tag: cat ? `${cat.icon} ${cat.label}` : def.sub };
+      const wrong = box !== null && box.productId !== def.id;
+      return {
+        key: `slot:${slot.id}:${slot.count}:${box?.productId ?? ''}`,
+        title: def.name,
+        sub: wrong ? `This spot is reserved for ${def.name}` : `$${def.price.toFixed(2)} · ${slot.count} / ${cap} on shelf`,
+        tag: wrong ? 'Pick another spot' : cat ? `${cat.icon} ${cat.label}` : def.sub,
+      };
     }
     if (box) {
       const bdef = PRODUCT_BY_ID[box.productId];
       const fits = slot.capacityFor(bdef) > 0;
-      return { key: `slot:${slot.id}:empty:${box.productId}`, title: 'Empty slot', sub: fits ? `Holds up to ${slot.capacityFor(bdef)} ${bdef.name}` : `${bdef.name} is too tall here`, tag: fits ? 'Hold or tap to stock' : 'Try a Low Bench' };
+      return { key: `slot:${slot.id}:empty:${box.productId}`, title: 'Empty slot', sub: fits ? `Holds up to ${slot.capacityFor(bdef)} ${bdef.name}` : `${bdef.name} is too tall here`, tag: fits ? 'Tap = 1, hold = fill' : 'Try a Low Bench' };
     }
     return null;
   }
 
   private rebuildInstances(): void {
     this.dirty = false;
+    this.tags.rebuild(this.units);
     const counts = new Map<string, number>();
     for (const unit of this.units) {
       for (const slot of unit.slots) {
