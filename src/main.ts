@@ -18,6 +18,8 @@ import { TargetRing } from './game/target-ring';
 import { BoxManager } from './game/boxes';
 import { ShelfManager } from './game/shelves';
 import { OrderSystem } from './game/orders';
+import { CustomerSystem } from './game/customers';
+import { buildCounter } from './world/counter';
 import { gameStore } from './game/state';
 import { PRODUCT_BY_ID } from './config/products';
 import { buildDeliveryPad } from './world/delivery-pad';
@@ -59,6 +61,9 @@ gfx.scene.add(buildDeliveryPad());
 const boxes = new BoxManager(gfx.scene, player, interactions, colliders);
 const shelves = new ShelfManager(gfx.scene, colliders, interactions, boxes, () => hands.kick());
 const orders = new OrderSystem(boxes);
+const counter = buildCounter(colliders);
+gfx.scene.add(counter.group);
+const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter);
 const showcase = new CatShowcase(gfx.scene, interactions, colliders);
 
 // Re-apply now that lights and meshes exist so shadow settings match the profile.
@@ -87,6 +92,7 @@ loop.add((dt) => {
   orders.update(dt);
   boxes.update(dt);
   shelves.update(dt);
+  customers.update(dt);
   hud.setDeliveryEta(orders.nextEta);
 });
 loop.add((dt) => {
@@ -107,7 +113,7 @@ loop.add((dt) => {
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, gameStore, products: PRODUCT_BY_ID };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

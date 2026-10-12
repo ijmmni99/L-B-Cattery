@@ -253,6 +253,29 @@ export class ShelfManager {
     return n;
   }
 
+  /** Slots that currently have sellable items on the shelf. */
+  stockedSlots(): ShelfSlot[] {
+    const out: ShelfSlot[] = [];
+    for (const u of this.units) for (const s of u.slots) if (s.def && s.count > 0) out.push(s);
+    return out;
+  }
+
+  /** Floor spot in front of a slot where a customer stands to browse it. */
+  standPoint(slot: ShelfSlot, out: THREE.Vector3): THREE.Vector3 {
+    const yaw = slot.unit.spot.yaw;
+    return out.set(slot.proxy.position.x + Math.sin(yaw) * 0.85, 0, slot.proxy.position.z + Math.cos(yaw) * 0.85);
+  }
+
+  /** Customer buys up to `qty` items from a slot; returns how many were taken. */
+  sell(slot: ShelfSlot, qty: number): number {
+    const n = Math.min(qty, slot.count);
+    if (n <= 0) return 0;
+    slot.count -= n;
+    // The slot keeps its product reservation so the player can simply restock it.
+    this.dirty = true;
+    return n;
+  }
+
   // ---------------------------------------------------------------- interaction
 
   private registerSlot(slot: ShelfSlot): void {

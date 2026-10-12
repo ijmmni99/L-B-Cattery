@@ -42,3 +42,13 @@ export const PALETTE = {
   pink: '#ff8fab',
   sidewalk: '#d9d4cc',
 } as const;
+
+/** Checkout counter along the front wall (right side). */
+export const COUNTER = { x: 4.6, z: 4.95, w: 2.4, d: 0.8, height: 0.98 } as const;
+
+/** Customers queue in front of the counter, extending toward the door. */
+export const QUEUE = { x: COUNTER.x, z: COUNTER.z - COUNTER.d / 2 - 0.85, step: 0.85 } as const;
+
+/** Just inside the door, and out on the pavement (customers spawn/despawn there). */
+export const DOOR_INSIDE = { x: STORE.minX + 1.6, z: (2.2 + 4.2) / 2 } as const;
+export const DOOR_OUTSIDE = { x: STORE.minX - 2.6, z: (2.2 + 4.2) / 2 } as const;
