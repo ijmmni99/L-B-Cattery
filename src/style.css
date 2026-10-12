@@ -867,3 +867,18 @@ input[type='range'].sens {
   .cat-swatch { width: 36px; height: 36px; font-size: 18px; }
   .adopt-btn { padding: 8px 12px; }
 }
+
+.pill.level { padding: 4px 12px; font-size: 13px; gap: 8px; background: #e8f4ff; }
+.xpbar { width: 64px; height: 8px; border-radius: 4px; background: rgba(59, 58, 74, 0.15); overflow: hidden; display: inline-block; }
+.xpbar i { display: block; height: 100%; background: #4f9dff; border-radius: 4px; transition: width 0.4s; }
+.product-row.locked { opacity: 0.55; }
+.lock-tag { font-weight: 900; font-size: 13px; padding: 6px 10px; border-radius: 10px; background: #fff; box-shadow: var(--shadow); }
+.price-row .stepper { margin-left: auto; }
+.price-row .step-qty { min-width: 46px; }
+.margin { font-size: 12px; font-weight: 800; }
+.margin.good { color: #2a8a5a; }
+.margin.bad { color: #c0392b; }
+.lock-tag { display: none; }
+.product-row.locked .lock-tag { display: inline-block; }
+.product-row.locked .stepper { display: none; }
+.reset-game { margin-top: 6px; color: #c0392b; }

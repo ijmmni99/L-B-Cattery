@@ -276,6 +276,31 @@ export class ShelfManager {
     return n;
   }
 
+  /** Rebuild price tags / instances (e.g. after a price change). */
+  markDirty(): void {
+    this.dirty = true;
+  }
+
+  serialize(): Array<{ id: string; productId: string; count: number }> {
+    const out: Array<{ id: string; productId: string; count: number }> = [];
+    for (const u of this.units) for (const s of u.slots) if (s.productId) out.push({ id: s.id, productId: s.productId, count: s.count });
+    return out;
+  }
+
+  restore(saved: Array<{ id: string; productId: string; count: number }>): void {
+    for (const s of saved) {
+      const def = PRODUCT_BY_ID[s.productId];
+      if (!def) continue;
+      for (const u of this.units) {
+        const slot = u.slots.find((x) => x.id === s.id);
+        if (!slot) continue;
+        slot.productId = def.id;
+        slot.count = Math.max(0, Math.min(s.count, slot.capacityFor(def)));
+      }
+    }
+    this.dirty = true;
+  }
+
   // ---------------------------------------------------------------- interaction
 
   private registerSlot(slot: ShelfSlot): void {

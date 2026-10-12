@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { BREED_BY_ID, RARITIES } from '../config/cats';
+import { ADOPTION_FACTOR } from '../config/progression';
 import { VILLA_SIZE, VILLA_SPOTS, type VillaSpot } from '../config/villas';
 import { haptic } from '../core/haptics';
 import { mergeStatic } from '../core/merge-static';
 import { buildVilla, type VillaModel } from '../models/villa-model';
 import { toast } from '../ui/toast';
 import type { CollisionWorld } from '../world/colliders';
-import type { CatData } from './cat-data';
+import { catValue, type CatData } from './cat-data';
 import { CatEntity } from './cat-entity';
 import { NO_OUTLINE, type InfoCardData, type Interactable, type InteractionSystem } from './interactions';
 import { spendMoney } from './state';
@@ -16,6 +17,9 @@ const ROAM_RADIUS = 0.5;
 export class Villa {
   unlocked: boolean;
   cat: CatEntity | null = null;
+  /** A customer is on their way to adopt this cat. */
+  reserved = false;
+  catItem: Interactable | null = null;
   readonly model: VillaModel;
   readonly group = new THREE.Group();
   readonly area = { center: new THREE.Vector3(), radius: ROAM_RADIUS };
@@ -57,6 +61,49 @@ export class VillaManager {
 
   private readonly root: THREE.Group;
 
+  /** Floor spot in front of a villa where a visitor stands to look at its cat. */
+  static standPoint(villa: Villa, out: THREE.Vector3): THREE.Vector3 {
+    return out.set(villa.spot.x, 0, villa.spot.z + VILLA_SIZE.d / 2 + 0.6);
+  }
+
+  static adoptionFee(cat: CatData): number {
+    return Math.round(catValue(cat) * ADOPTION_FACTOR);
+  }
+
+  /** Villas with a cat nobody has claimed yet. */
+  adoptable(): Villa[] {
+    return this.villas.filter((v) => v.cat && !v.reserved);
+  }
+
+  /** Cat leaves with its new family. */
+  releaseCat(villa: Villa): void {
+    const cat = villa.cat;
+    if (!cat) return;
+    cat.group.removeFromParent();
+    if (villa.catItem) this.interactions.remove(villa.catItem);
+    villa.cat = null;
+    villa.catItem = null;
+    villa.reserved = false;
+    villa.model.setLabel(`Villa ${villa.index + 1}`);
+  }
+
+  serialize(): Array<{ id: string; unlocked: boolean; cat: CatData | null }> {
+    return this.villas.map((v) => ({ id: v.spot.id, unlocked: v.unlocked, cat: v.cat?.data ?? null }));
+  }
+
+  restore(saved: Array<{ id: string; unlocked: boolean; cat: CatData | null }>): void {
+    for (const s of saved) {
+      const villa = this.villas.find((v) => v.spot.id === s.id);
+      if (!villa) continue;
+      if (s.unlocked && !villa.unlocked) {
+        villa.unlocked = true;
+        villa.model.cover.visible = false;
+        villa.model.setLabel(`Villa ${villa.index + 1}`);
+      }
+      if (s.cat && !villa.cat) this.assignCat(villa, s.cat, false);
+    }
+  }
+
   get catCount(): number {
     return this.villas.filter((v) => v.cat).length;
   }
@@ -66,15 +113,15 @@ export class VillaManager {
   }
 
   /** Moves a cat into a villa. */
-  assignCat(villa: Villa, data: CatData): void {
+  assignCat(villa: Villa, data: CatData, announce = true): void {
     if (villa.cat) return;
     const start = villa.area.center.clone();
     const cat = new CatEntity(data, villa.area, start);
     villa.cat = cat;
     this.root.add(cat.group);
     villa.model.setLabel(data.name);
-    cat.meow();
-    this.addCatInteraction(cat);
+    if (announce) cat.meow();
+    villa.catItem = this.addCatInteraction(cat);
   }
 
   private tryUnlock(villa: Villa): void {
@@ -109,7 +156,7 @@ export class VillaManager {
     this.interactions.add(item);
   }
 
-  private addCatInteraction(cat: CatEntity): void {
+  private addCatInteraction(cat: CatEntity): Interactable {
     const item: Interactable = {
       position: cat.position,
       object: cat.hitProxy,
@@ -123,7 +170,7 @@ export class VillaManager {
           title: cat.data.name,
           badge: { text: r.label, color: r.color },
           sub: `${breed?.name ?? ''} · ${breed?.coats[cat.data.appearance.coatIndex]?.name ?? ''}`,
-          tag: cat.data.personality,
+          tag: `${cat.data.personality} · adoption $${VillaManager.adoptionFee(cat.data)}`,
         };
       },
       act: () => {
@@ -132,5 +179,6 @@ export class VillaManager {
       },
     };
     this.interactions.add(item);
+    return item;
   }
 }

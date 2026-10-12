@@ -129,3 +129,6 @@ export const PRODUCT_BY_ID: Record<string, ProductDef> = Object.fromEntries(PROD
 export function boxCost(p: ProductDef): number {
   return p.cost * p.boxSize;
 }
+
+/** Suggested prices as shipped; the live `price` can be changed from the tablet. */
+export const DEFAULT_PRICE: Record<string, number> = Object.fromEntries(PRODUCTS.map((p) => [p.id, p.price]));

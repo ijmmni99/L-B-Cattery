@@ -1,4 +1,5 @@
 import { BREED_BY_ID, RARITIES } from '../config/cats';
+import { maxRarityFor } from '../config/progression';
 import { OFFERS_PER_ROLL, REROLL_COST } from '../config/villas';
 import { haptic } from '../core/haptics';
 import { sfx } from '../core/sfx';
@@ -19,7 +20,7 @@ export function createCatShop(parent: HTMLElement, villas: VillaManager): (villa
   let offers: CatData[] = [];
 
   const roll = (): void => {
-    offers = Array.from({ length: OFFERS_PER_ROLL }, () => generateCat({ maxRarity: 'rare' }));
+    offers = Array.from({ length: OFFERS_PER_ROLL }, () => generateCat({ maxRarity: maxRarityFor(gameStore.getState().level) }));
   };
 
   const render = (): void => {

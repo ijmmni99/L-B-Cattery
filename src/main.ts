@@ -21,7 +21,10 @@ import { OrderSystem } from './game/orders';
 import { CustomerSystem } from './game/customers';
 import { ShopDoor } from './world/door';
 import { buildCounter } from './world/counter';
-import { gameStore } from './game/state';
+import { gameStore, onPriceChange, setProductPrice } from './game/state';
+import { clearSave, loadSave, writeSave, type SaveData } from './core/save';
+import { levelForXp } from './config/progression';
+import { DEFAULT_PRICE, PRODUCTS } from './config/products';
 import { PRODUCT_BY_ID } from './config/products';
 import { buildDeliveryPad } from './world/delivery-pad';
 import { CatShowcase } from './game/cat-showcase';
@@ -69,12 +72,52 @@ const counter = buildCounter(colliders);
 gfx.scene.add(counter.group);
 const door = new ShopDoor();
 gfx.scene.add(door.group);
-const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter, colliders, player.position);
 const catTestMode = new URLSearchParams(location.search).get('cats') === '1';
 // Debug cat stage (?cats=1) and the real villas share the middle of the shop, so only one is built.
 const showcase = new CatShowcase(gfx.scene, interactions, colliders, catTestMode);
 let openCatShop: (villa: Villa) => void = () => undefined;
 const villas = catTestMode ? null : new VillaManager(gfx.scene, colliders, interactions, (v) => openCatShop(v));
+const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter, colliders, player.position, villas);
+
+// ---- Save / load (localStorage). Restored before the first frame.
+const snapshot = (): SaveData => {
+  const st = gameStore.getState();
+  return {
+    v: 1,
+    money: st.money,
+    xp: st.xp,
+    prices: Object.fromEntries(PRODUCTS.filter((p) => p.price !== DEFAULT_PRICE[p.id]).map((p) => [p.id, p.price])),
+    shelves: shelves.serialize(),
+    villas: villas?.serialize() ?? [],
+    boxes: boxes.serialize(),
+    orders: orders.serialize(),
+  };
+};
+const saved = loadSave();
+if (saved) {
+  const xp = Math.max(0, saved.xp ?? 0);
+  gameStore.setState({ money: saved.money, xp, level: levelForXp(xp) });
+  for (const [id, price] of Object.entries(saved.prices ?? {})) setProductPrice(id, price);
+  shelves.restore(saved.shelves ?? []);
+  villas?.restore(saved.villas ?? []);
+  boxes.spawnBoxes(saved.boxes ?? []);
+  orders.restore(saved.orders ?? []);
+}
+onPriceChange(() => shelves.markDirty());
+let resetting = false;
+const save = (): void => {
+  if (!resetting) writeSave(snapshot());
+};
+setInterval(save, 8000);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) save();
+});
+window.addEventListener('pagehide', save);
+const resetGame = (): void => {
+  resetting = true;
+  clearSave();
+  location.reload();
+};
 
 // Re-apply now that lights and meshes exist so shadow settings match the profile.
 gfx.applyQuality(getSettings().quality);
@@ -88,7 +131,7 @@ const crosshair = createCrosshair(ui);
 const actionButton = createActionButton(ui, input);
 input.onActionDown(() => interactions.press());
 input.onActionUp(() => interactions.release());
-createSettingsPanel(ui);
+createSettingsPanel(ui, undefined, resetGame);
 initToasts(ui);
 const hud = createHud(ui);
 createTablet(ui, orders);
@@ -130,7 +173,7 @@ loop.add((dt) => {
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, gameStore, products: PRODUCT_BY_ID };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, snapshot, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

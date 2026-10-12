@@ -1,7 +1,8 @@
-import { CATEGORIES, PRODUCTS, boxCost, type ProductDef } from '../config/products';
+import { CATEGORIES, PRODUCTS, PRODUCT_BY_ID, boxCost, type ProductDef } from '../config/products';
 import { haptic } from '../core/haptics';
 import { OrderSystem } from '../game/orders';
-import { DELIVERY_SECONDS, gameStore } from '../game/state';
+import { DELIVERY_SECONDS, gameStore, onPriceChange, setProductPrice } from '../game/state';
+import { DEFAULT_PRICE } from '../config/products';
 import { toast } from './toast';
 
 const TABLET_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h10a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3zm0 2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H7zm5 14.2a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2z"/></svg>`;
@@ -9,7 +10,7 @@ const TABLET_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="cur
 const TABS: Array<{ id: string; label: string; ready: boolean }> = [
   { id: 'supplies', label: 'Supplies', ready: true },
   { id: 'cats', label: 'Cats', ready: false },
-  { id: 'prices', label: 'Prices', ready: false },
+  { id: 'prices', label: 'Prices', ready: true },
   { id: 'upgrades', label: 'Upgrades', ready: false },
   { id: 'staff', label: 'Staff', ready: false },
 ];
@@ -40,6 +41,7 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
       </div>
       <div class="tabs">${TABS.map((t) => `<button type="button" class="tab${t.id === 'supplies' ? ' active' : ''}${t.ready ? '' : ' soon'}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>
       <div class="tab-body supplies-body"></div>
+      <div class="tab-body prices-body" hidden></div>
       <div class="tab-body soon-body" hidden><p>Coming soon!</p></div>
       <div class="order-bar">
         <div class="order-total"><span>Total</span><b class="order-total-value">$0</b><small>Delivery in ~${DELIVERY_SECONDS}s</small></div>
@@ -60,7 +62,7 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
   const moneyEl = q<HTMLElement>('.tablet-money-value');
 
   const row = (p: ProductDef): string => `
-    <div class="product-row" data-id="${p.id}">
+    <div class="product-row${p.unlockLevel > gameStore.getState().level ? ' locked' : ''}" data-id="${p.id}">
       <div class="product-icon" style="background:${p.color}">${p.icon}</div>
       <div class="product-info">
         <div class="product-name">${p.name}</div>
@@ -72,11 +74,47 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
         <span class="step-qty">0</span>
         <button type="button" class="step plus" aria-label="More">+</button>
       </div>
+      <span class="lock-tag">🔒 Lv ${p.unlockLevel}</span>
     </div>`;
   body.innerHTML = CATEGORIES.map((c) => {
     const items = PRODUCTS.filter((p) => p.category === c.id);
     return `<h3 class="cat-title">${c.icon} ${c.label}</h3>${items.map(row).join('')}`;
   }).join('');
+
+  const pricesBody = q<HTMLElement>('.prices-body');
+  const renderPrices = (): void => {
+    const level = gameStore.getState().level;
+    pricesBody.innerHTML =
+      `<p class="hint">Customers buy less when you charge much more than the suggested price, and more when it's cheap.</p>` +
+      PRODUCTS.filter((p) => p.unlockLevel <= level)
+        .map((p) => {
+          const margin = p.price - p.cost;
+          return `<div class="product-row price-row" data-id="${p.id}">
+            <div class="product-icon" style="background:${p.color}">${p.icon}</div>
+            <div class="product-info">
+              <div class="product-name">${p.name}</div>
+              <div class="product-sub">Cost $${fmt(p.cost)} · suggested $${fmt(DEFAULT_PRICE[p.id])}</div>
+              <div class="margin ${margin > 0 ? 'good' : 'bad'}">${margin >= 0 ? '+' : '−'}$${fmt(Math.abs(margin))} profit each</div>
+            </div>
+            <div class="stepper">
+              <button type="button" class="pstep" data-d="-1" aria-label="Lower price">−</button>
+              <span class="step-qty">$${fmt(p.price)}</span>
+              <button type="button" class="pstep" data-d="1" aria-label="Raise price">+</button>
+            </div>
+          </div>`;
+        })
+        .join('');
+  };
+  pricesBody.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.pstep');
+    const rowEl = (e.target as HTMLElement).closest<HTMLElement>('.price-row');
+    if (!btn || !rowEl) return;
+    const id = rowEl.dataset.id ?? '';
+    setProductPrice(id, PRODUCT_BY_ID[id].price + Number(btn.dataset.d));
+    haptic(6);
+  });
+  onPriceChange(renderPrices);
+  renderPrices();
 
   const lines = (): Record<string, number> => Object.fromEntries([...qty].filter(([, n]) => n > 0));
   const refresh = (): void => {
@@ -87,8 +125,10 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
     orderBtn.disabled = total === 0;
     orderBtn.classList.toggle('short', total > money);
     orderBtn.textContent = total > money ? 'Not enough $' : 'Order';
+    const level = gameStore.getState().level;
     for (const r of body.querySelectorAll<HTMLElement>('.product-row')) {
       const n = qty.get(r.dataset.id ?? '') ?? 0;
+      r.classList.toggle('locked', PRODUCT_BY_ID[r.dataset.id ?? ''].unlockLevel > level);
       r.classList.toggle('has', n > 0);
       const label = r.querySelector('.step-qty');
       if (label) label.textContent = String(n);
@@ -99,7 +139,7 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
   body.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.step');
     const rowEl = (e.target as HTMLElement).closest<HTMLElement>('.product-row');
-    if (!btn || !rowEl) return;
+    if (!btn || !rowEl || rowEl.classList.contains('locked')) return;
     const id = rowEl.dataset.id ?? '';
     const cur = qty.get(id) ?? 0;
     qty.set(id, Math.min(20, Math.max(0, cur + (btn.classList.contains('plus') ? 1 : -1))));
@@ -122,10 +162,12 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
   for (const tab of overlay.querySelectorAll<HTMLButtonElement>('.tab')) {
     tab.addEventListener('click', () => {
       for (const t of overlay.querySelectorAll('.tab')) t.classList.toggle('active', t === tab);
-      const supplies = tab.dataset.tab === 'supplies';
-      body.hidden = !supplies;
-      soonBody.hidden = supplies;
-      (overlay.querySelector('.order-bar') as HTMLElement).hidden = !supplies;
+      const id = tab.dataset.tab;
+      body.hidden = id !== 'supplies';
+      pricesBody.hidden = id !== 'prices';
+      soonBody.hidden = id === 'supplies' || id === 'prices';
+      (overlay.querySelector('.order-bar') as HTMLElement).hidden = id !== 'supplies';
+      if (id === 'prices') renderPrices();
     });
   }
 
@@ -134,6 +176,7 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenCha
     if (open) {
       if (document.pointerLockElement) document.exitPointerLock();
       refresh();
+      renderPrices();
     }
     onOpenChange?.(open);
   };

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { CUSTOMERS } from '../config/customers';
+import { DEFAULT_PRICE } from '../config/products';
+import { PRICE_LIMIT, PRICE_OK, XP_ADOPTION, xpForSale } from '../config/progression';
 import { haptic } from '../core/haptics';
 import { NavGrid } from '../core/nav';
 import type { CheckoutCounter } from '../world/counter';
@@ -9,7 +11,8 @@ import { toast } from '../ui/toast';
 import { Customer } from './customer';
 import type { InfoCardData, Interactable, InteractionSystem } from './interactions';
 import type { ShelfManager } from './shelves';
-import { addMoney } from './state';
+import { addMoney, addXp } from './state';
+import { VillaManager } from './villas';
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 const V = new THREE.Vector3();
@@ -19,6 +22,8 @@ const YIELD_DIST = 0.7;
 export interface ShopStats {
   served: number;
   walkouts: number;
+  tooExpensive: number;
+  adopted: number;
   earned: number;
 }
 
@@ -27,7 +32,7 @@ export interface ShopStats {
  * and lets the player check them out.
  */
 export class CustomerSystem {
-  readonly stats: ShopStats = { served: 0, walkouts: 0, earned: 0 };
+  readonly stats: ShopStats = { served: 0, walkouts: 0, earned: 0, tooExpensive: 0, adopted: 0 };
   private readonly customers: Customer[] = [];
   private readonly queue: Customer[] = [];
   private spawnTimer: number = CUSTOMERS.firstDelay;
@@ -42,6 +47,7 @@ export class CustomerSystem {
     counter: CheckoutCounter,
     colliders: CollisionWorld,
     private readonly playerPos: THREE.Vector3,
+    private readonly villas: VillaManager | null = null,
   ) {
     this.nav = new NavGrid(colliders, STORE.minX, STORE.minZ, STORE.maxX, STORE.maxZ);
     const item: Interactable = {
@@ -75,7 +81,7 @@ export class CustomerSystem {
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = rand(CUSTOMERS.spawnMin, CUSTOMERS.spawnMax);
-      if (this.customers.length < CUSTOMERS.maxInStore && this.shelves.stockedSlots().length > 0) this.spawn();
+      if (this.customers.length < CUSTOMERS.maxInStore && (this.shelves.stockedSlots().length > 0 || (this.villas?.adoptable().length ?? 0) > 0)) this.spawn();
     }
 
     for (let i = this.customers.length - 1; i >= 0; i--) {
@@ -104,8 +110,16 @@ export class CustomerSystem {
     const n = Math.min(slots.length, CUSTOMERS.minWishes + Math.floor(Math.random() * (CUSTOMERS.maxWishes - CUSTOMERS.minWishes + 1)));
     for (const slot of slots.slice(0, n)) {
       const cheap = (slot.def?.price ?? 99) <= 5;
-      c.wishes.push({ slot, qty: 1 + Math.floor(Math.random() * (cheap ? 3 : 2)) });
+      c.wishes.push({ kind: 'shelf', slot, qty: 1 + Math.floor(Math.random() * (cheap ? 3 : 2)) });
     }
+    // Some visitors come to adopt: they reserve one available cat.
+    const free = this.villas?.adoptable() ?? [];
+    if (free.length > 0 && (slots.length === 0 || Math.random() < CUSTOMERS.adoptChance)) {
+      const villa = free[Math.floor(Math.random() * free.length)];
+      villa.reserved = true;
+      c.wishes.unshift({ kind: 'villa', villa });
+    }
+    if (c.wishes.length === 0) return;
     c.walkRaw([DOOR_INSIDE]);
     this.scene.add(c.root, c.bubble.sprite);
     this.customers.push(c);
@@ -120,9 +134,15 @@ export class CustomerSystem {
           this.finishShopping(c);
           return;
         }
-        const stand = this.shelves.standPoint(wish.slot, V);
-        const front = Math.atan2(wish.slot.proxy.position.x - stand.x, wish.slot.proxy.position.z - stand.z);
-        c.goTo(stand.x, stand.z, front);
+        let face: number;
+        if (wish.kind === 'villa') {
+          VillaManager.standPoint(wish.villa, V);
+          face = Math.atan2(wish.villa.spot.x - V.x, wish.villa.spot.z - V.z);
+        } else {
+          this.shelves.standPoint(wish.slot, V);
+          face = Math.atan2(wish.slot.proxy.position.x - V.x, wish.slot.proxy.position.z - V.z);
+        }
+        c.goTo(V.x, V.z, face);
         c.stage = 'browse';
         return;
       }
@@ -136,12 +156,29 @@ export class CustomerSystem {
         if (!c.idle) return;
         c.character.reach = 0;
         const wish = c.wishes.shift();
-        if (wish?.slot.def) {
+        if (wish?.kind === 'villa') {
+          const cat = wish.villa.cat;
+          if (cat) {
+            c.addAdoption(wish.villa, cat.data.name, VillaManager.adoptionFee(cat.data));
+            cat.meow();
+          } else {
+            wish.villa.reserved = false;
+          }
+        } else if (wish?.slot.def) {
           const def = wish.slot.def;
-          const got = this.shelves.sell(wish.slot, wish.qty);
-          if (got > 0) {
-            c.add(def, got);
-            haptic(4);
+          const ratio = def.price / (DEFAULT_PRICE[def.id] ?? def.price);
+          const chance = ratio <= PRICE_OK ? 1 : Math.max(0, 1 - (ratio - PRICE_OK) / (PRICE_LIMIT - PRICE_OK));
+          if (Math.random() > chance) {
+            c.bubble.show('💸');
+            this.stats.tooExpensive++;
+          } else {
+            // Bargains make people grab one more.
+            const qty = wish.qty + (ratio < 0.85 ? 1 : 0);
+            const got = this.shelves.sell(wish.slot, qty);
+            if (got > 0) {
+              c.add(def, got);
+              haptic(4);
+            }
           }
         }
         c.stage = 'shop';
@@ -189,6 +226,8 @@ export class CustomerSystem {
   }
 
   private leave(c: Customer): void {
+    for (const w of c.wishes) if (w.kind === 'villa') w.villa.reserved = false;
+    for (const l of c.basket) if (l.villa && !c.sold) l.villa.reserved = false;
     c.stage = 'leaving';
     c.spotIndex = -1;
     c.goTo(DOOR_INSIDE.x, DOOR_INSIDE.z, null, [DOOR_OUTSIDE]);
@@ -227,6 +266,15 @@ export class CustomerSystem {
     addMoney(gain);
     this.stats.served++;
     this.stats.earned += gain;
+    for (const l of c.basket) {
+      if (l.villa) {
+        this.villas?.releaseCat(l.villa);
+        this.stats.adopted++;
+        addXp(XP_ADOPTION);
+      }
+    }
+    c.sold = true;
+    addXp(xpForSale(gain));
     const q = this.queue.indexOf(c);
     if (q >= 0) this.queue.splice(q, 1);
     c.bubble.show(extra > 0 ? '😍' : '😊');
@@ -257,7 +305,7 @@ export class CustomerSystem {
     return {
       key: `cust:${c.itemCount}:${c.total}:${mood}`,
       title: 'Customer at the register',
-      sub: c.basket.map((l) => `${l.qty}× ${l.def.name}`).join(', '),
+      sub: c.basket.map((l) => (l.qty > 1 ? `${l.qty}× ${l.name}` : l.name)).join(', '),
       tag: mood,
     };
   }

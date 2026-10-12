@@ -1,4 +1,4 @@
-import { gameStore } from '../game/state';
+import { gameStore, levelProgress } from '../game/state';
 
 export interface Hud {
   /** Seconds until the next delivery (null = none on the way). */
@@ -13,17 +13,23 @@ export function createHud(parent: HTMLElement): Hud {
   el.className = 'hud';
   el.innerHTML = `
     <div class="pill money"><span class="coin">$</span><span class="money-value"></span></div>
+    <div class="pill level"><span class="lvl"></span><span class="xpbar"><i></i></span></div>
     <div class="pill delivery hidden"><span>📦</span><span class="delivery-text"></span></div>`;
   parent.appendChild(el);
   const money = el.querySelector<HTMLElement>('.money');
   const value = el.querySelector<HTMLElement>('.money-value');
+  const lvl = el.querySelector<HTMLElement>('.lvl');
+  const bar = el.querySelector<HTMLElement>('.xpbar i');
   const delivery = el.querySelector<HTMLElement>('.delivery');
   const deliveryText = el.querySelector<HTMLElement>('.delivery-text');
-  if (!money || !value || !delivery || !deliveryText) throw new Error('hud markup');
+  if (!lvl || !bar || !money || !value || !delivery || !deliveryText) throw new Error('hud markup');
 
   let last = gameStore.getState().money;
   const render = (): void => {
-    const m = gameStore.getState().money;
+    const st = gameStore.getState();
+    const m = st.money;
+    lvl.textContent = `Lv ${st.level}`;
+    bar.style.width = `${Math.round(levelProgress(st) * 100)}%`;
     value.textContent = fmt(m);
     if (m !== last) {
       money.classList.remove('gain', 'loss');

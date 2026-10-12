@@ -37,7 +37,7 @@ export function createCheckoutPanel(parent: HTMLElement, system: CustomerSystem)
   const givenTotal = (): number => cents([...given].reduce((n, [v, k]) => n + v * k, 0));
   const due = (): number => (c?.payment ? cents(c.payment.tender - c.total) : 0);
   const remaining = (id: string, qty: number): number => qty - (c?.scanned.get(id) ?? 0);
-  const scannedValue = (): number => (c ? cents(c.basket.reduce((n, l) => n + l.def.price * (c?.scanned.get(l.def.id) ?? 0), 0)) : 0);
+  const scannedValue = (): number => (c ? cents(c.basket.reduce((n, l) => n + l.price * (c?.scanned.get(l.id) ?? 0), 0)) : 0);
   const allScanned = (): boolean => (c ? c.scannedCount >= c.itemCount : false);
 
   const close = (finished: boolean): void => {
@@ -58,11 +58,11 @@ export function createCheckoutPanel(parent: HTMLElement, system: CustomerSystem)
     if (phase === 'scan') {
       const rows = c.basket
         .map((l) => {
-          const left = remaining(l.def.id, l.qty);
+          const left = remaining(l.id, l.qty);
           const done = l.qty - left;
-          return `<button type="button" class="scan-row${left === 0 ? ' done' : ''}" data-act="scan" data-id="${l.def.id}">
-            <span class="scan-icon" style="background:${l.def.color}">${l.def.icon}</span>
-            <span class="scan-name">${l.def.name}<small>${fmt(l.def.price)} each</small></span>
+          return `<button type="button" class="scan-row${left === 0 ? ' done' : ''}" data-act="scan" data-id="${l.id}">
+            <span class="scan-icon" style="background:${l.color}">${l.icon}</span>
+            <span class="scan-name">${l.name}<small>${fmt(l.price)} each</small></span>
             <span class="scan-count">${left === 0 ? '✓' : `${done}/${l.qty}`}</span>
           </button>`;
         })
@@ -101,9 +101,9 @@ export function createCheckoutPanel(parent: HTMLElement, system: CustomerSystem)
 
   const scanOne = (id?: string): void => {
     if (!c) return;
-    const line = c.basket.find((l) => (id ? l.def.id === id : remaining(l.def.id, l.qty) > 0) && remaining(l.def.id, l.qty) > 0);
+    const line = c.basket.find((l) => (id ? l.id === id : remaining(l.id, l.qty) > 0) && remaining(l.id, l.qty) > 0);
     if (!line) return;
-    c.scanned.set(line.def.id, (c.scanned.get(line.def.id) ?? 0) + 1);
+    c.scanned.set(line.id, (c.scanned.get(line.id) ?? 0) + 1);
     sfx.scan();
     haptic(8);
     if (allScanned()) {

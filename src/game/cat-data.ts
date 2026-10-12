@@ -88,3 +88,9 @@ export function catPrice(cat: CatData): number {
   const breed = BREED_BY_ID[cat.appearance.breedId];
   return Math.round((breed?.baseValue ?? 100) * RARITIES[cat.rarity].priceMult * CAT_PRICE_FACTOR);
 }
+
+/** Base worth of a cat (breed value x rarity); shelter and adoption prices derive from it. */
+export function catValue(cat: CatData): number {
+  const breed = BREED_BY_ID[cat.appearance.breedId];
+  return (breed?.baseValue ?? 100) * RARITIES[cat.rarity].priceMult;
+}

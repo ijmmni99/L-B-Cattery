@@ -1,9 +1,9 @@
 import { PRODUCT_BY_ID, boxCost } from '../config/products';
 import { toast } from '../ui/toast';
 import type { BoxManager } from './boxes';
-import { DELIVERY_SECONDS, spendMoney } from './state';
+import { DELIVERY_SECONDS, gameStore, spendMoney } from './state';
 
-interface PendingOrder {
+export interface PendingOrder {
   lines: Record<string, number>;
   eta: number;
 }
@@ -27,11 +27,21 @@ export class OrderSystem {
     const clean: Record<string, number> = {};
     for (const [id, n] of Object.entries(lines)) if (n > 0 && PRODUCT_BY_ID[id]) clean[id] = n;
     if (Object.keys(clean).length === 0) return { ok: false, reason: 'Pick something first' };
+    const level = gameStore.getState().level;
+    for (const id of Object.keys(clean)) if (PRODUCT_BY_ID[id].unlockLevel > level) return { ok: false, reason: `${PRODUCT_BY_ID[id].name} unlocks at level ${PRODUCT_BY_ID[id].unlockLevel}` };
     const total = OrderSystem.total(clean);
     if (!spendMoney(total)) return { ok: false, reason: 'Not enough money' };
     this.pending.push({ lines: clean, eta: DELIVERY_SECONDS });
     toast(`Ordered · arrives in ${DELIVERY_SECONDS}s`, 'good');
     return { ok: true, total };
+  }
+
+  serialize(): PendingOrder[] {
+    return this.pending.map((o) => ({ lines: { ...o.lines }, eta: o.eta }));
+  }
+
+  restore(saved: PendingOrder[]): void {
+    for (const o of saved) this.pending.push({ lines: o.lines, eta: Math.max(1, o.eta) });
   }
 
   /** Seconds until the next delivery, or null when nothing is on the way. */

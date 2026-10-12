@@ -13,7 +13,7 @@ const QUALITY: Array<[QualityLevel, string]> = [
  * Gear button + Settings sheet (side panel in landscape, bottom sheet in
  * portrait). Changes apply live and persist.
  */
-export function createSettingsPanel(parent: HTMLElement, onOpenChange?: (open: boolean) => void): void {
+export function createSettingsPanel(parent: HTMLElement, onOpenChange?: (open: boolean) => void, onReset?: () => void): void {
   const gear = document.createElement('button');
   gear.type = 'button';
   gear.className = 'hud-icon-button settings-gear';
@@ -37,6 +37,7 @@ export function createSettingsPanel(parent: HTMLElement, onOpenChange?: (open: b
       </label>
       <label class="setting-row toggle-row"><span>Head bob</span><input type="checkbox" class="toggle bob" ${s.headBob ? 'checked' : ''}></label>
       <label class="setting-row toggle-row"><span>Vibration</span><input type="checkbox" class="toggle haptics" ${s.haptics ? 'checked' : ''}></label>
+      <button type="button" class="ghost-btn reset-game">Reset progress</button>
     </div>`;
   parent.appendChild(overlay);
 
@@ -70,6 +71,21 @@ export function createSettingsPanel(parent: HTMLElement, onOpenChange?: (open: b
   });
   q<HTMLInputElement>('.haptics').addEventListener('change', (e) => {
     updateSettings({ haptics: (e.target as HTMLInputElement).checked });
+  });
+
+  const resetBtn = q<HTMLButtonElement>('.reset-game');
+  let armed = false;
+  resetBtn.addEventListener('click', () => {
+    if (!armed) {
+      armed = true;
+      resetBtn.textContent = 'Tap again to erase everything';
+      setTimeout(() => {
+        armed = false;
+        resetBtn.textContent = 'Reset progress';
+      }, 3500);
+      return;
+    }
+    onReset?.();
   });
 
   const setOpen = (open: boolean): void => {

@@ -3,6 +3,7 @@ import { CUSTOMERS } from '../config/customers';
 import type { ProductDef } from '../config/products';
 import { cachedGeometry, mesh, pastel, roundedBox } from '../core/cache';
 import type { ShelfSlot } from './shelves';
+import type { Villa } from './villas';
 import type { NavGrid } from '../core/nav';
 import { MeowBubble } from '../models/cat/meow-bubble';
 import { Character, randomCharacterParams, type CharacterParams } from '../models/character-builder';
@@ -10,9 +11,17 @@ import { Character, randomCharacterParams, type CharacterParams } from '../model
 export type CustomerStage = 'shop' | 'browse' | 'pick' | 'queue' | 'waiting' | 'paying' | 'leaving';
 
 export interface BasketLine {
-  def: ProductDef;
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  price: number;
   qty: number;
+  /** Set for an adoption: the villa whose cat is being bought. */
+  villa?: Villa;
 }
+
+export type Wish = { kind: 'shelf'; slot: ShelfSlot; qty: number } | { kind: 'villa'; villa: Villa };
 
 /** Few shared looks so cached character geometry stays bounded. */
 const LOOKS: CharacterParams[] = [];
@@ -44,12 +53,14 @@ export class Customer {
   readonly position = new THREE.Vector3();
   stage: CustomerStage = 'shop';
   /** Remaining slots to visit. */
-  wishes: Array<{ slot: ShelfSlot; qty: number }> = [];
+  wishes: Wish[] = [];
   spotIndex = -1;
   patience: number = CUSTOMERS.patience;
   /** Units scanned so far at the register, per product id. */
   readonly scanned = new Map<string, number>();
   payment: { method: 'cash' | 'card'; tender: number } | null = null;
+  /** Set once the sale is rung up. */
+  sold = false;
   speed = 0;
   private readonly cruise = CUSTOMERS.walkSpeed * (0.8 + Math.random() * 0.35);
   private route: THREE.Vector3[] = [];
@@ -72,7 +83,7 @@ export class Customer {
 
   get total(): number {
     let t = 0;
-    for (const l of this.basket) t += l.def.price * l.qty;
+    for (const l of this.basket) t += l.price * l.qty;
     return Math.round(t * 100) / 100;
   }
 
@@ -87,9 +98,18 @@ export class Customer {
   }
 
   add(def: ProductDef, qty: number): void {
-    const line = this.basket.find((l) => l.def.id === def.id);
+    const line = this.basket.find((l) => l.id === def.id);
     if (line) line.qty += qty;
-    else this.basket.push({ def, qty });
+    else this.basket.push({ id: def.id, name: def.name, icon: def.icon, color: def.color, price: def.price, qty });
+    this.holdBasket();
+  }
+
+  addAdoption(villa: Villa, name: string, fee: number): void {
+    this.basket.push({ id: `cat:${name}`, name: `Adopt ${name}`, icon: '🐱', color: '#ffd1dc', price: fee, qty: 1, villa });
+    this.holdBasket();
+  }
+
+  private holdBasket(): void {
     this.character.carrying = true;
     this.basketMesh.visible = true;
   }

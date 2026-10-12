@@ -135,6 +135,20 @@ export class BoxManager {
 
   /** Boxes of the given products appear on the delivery pad. */
   spawnDelivery(lines: Record<string, number>): void {
+    const items: Array<{ productId: string; count: number }> = [];
+    for (const [productId, n] of Object.entries(lines)) {
+      for (let i = 0; i < n; i++) items.push({ productId, count: PRODUCT_BY_ID[productId].boxSize });
+    }
+    this.spawnBoxes(items);
+  }
+
+  /** What the player owns as loose stock (floor and hands), for saving. */
+  serialize(): Array<{ productId: string; count: number }> {
+    return this.boxes.filter((b) => b.count > 0).map((b) => ({ productId: b.productId, count: b.count }));
+  }
+
+  /** Boxes with exact counts appear on the delivery pad (also used when loading a save). */
+  spawnBoxes(items: Array<{ productId: string; count: number }>): void {
     const cols = Math.floor(DELIVERY_PAD.w / (BW + 0.06));
     const rows = Math.floor(DELIVERY_PAD.d / (BD + 0.06));
     const cells: Array<[number, number, number]> = [];
@@ -147,14 +161,13 @@ export class BoxManager {
         }
       }
     }
-    for (const [productId, n] of Object.entries(lines)) {
+    for (const { productId, count } of items) {
       const def = PRODUCT_BY_ID[productId];
-      for (let i = 0; i < n; i++) {
-        const cell = cells.find(([x, z, level]) => !this.boxes.some((b) => b.group.parent === this.scene && b.level === level && Math.abs(b.group.position.x - x) < 0.15 && Math.abs(b.group.position.z - z) < 0.15));
-        if (!cell) continue; // pad is full; extra boxes are dropped (rare)
-        const box = this.create(def, def.boxSize);
-        this.setDown(box, cell[0], cell[1], cell[2], 0);
-      }
+      if (!def || count <= 0) continue;
+      const cell = cells.find(([x, z, level]) => !this.boxes.some((b) => b.group.parent === this.scene && b.level === level && Math.abs(b.group.position.x - x) < 0.15 && Math.abs(b.group.position.z - z) < 0.15));
+      if (!cell) continue; // pad is full; extra boxes are dropped (rare)
+      const box = this.create(def, count);
+      this.setDown(box, cell[0], cell[1], cell[2], 0);
     }
     this.onChange();
   }
