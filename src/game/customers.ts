@@ -36,7 +36,7 @@ export class CustomerSystem {
   private readonly customers: Customer[] = [];
   private readonly queue: Customer[] = [];
   private spawnTimer: number = CUSTOMERS.firstDelay;
-  private readonly nav: NavGrid;
+  readonly nav: NavGrid;
   /** Set by the checkout panel; called when the player starts serving the first customer. */
   onCheckout: ((c: Customer) => void) | null = null;
 
@@ -129,6 +129,8 @@ export class CustomerSystem {
     switch (c.stage) {
       case 'shop': {
         if (!c.idle) return;
+        // Drop wishes whose shelf or villa was removed in build mode.
+        while (c.wishes[0] && (c.wishes[0].kind === 'villa' ? c.wishes[0].villa.removed : c.wishes[0].slot.unit.removed)) c.wishes.shift();
         const wish = c.wishes[0];
         if (!wish) {
           this.finishShopping(c);
@@ -136,7 +138,7 @@ export class CustomerSystem {
         }
         let face: number;
         if (wish.kind === 'villa') {
-          VillaManager.standPoint(wish.villa, V);
+          wish.villa.standPoint(V);
           face = Math.atan2(wish.villa.spot.x - V.x, wish.villa.spot.z - V.z);
         } else {
           this.shelves.standPoint(wish.slot, V);
@@ -157,14 +159,14 @@ export class CustomerSystem {
         c.character.reach = 0;
         const wish = c.wishes.shift();
         if (wish?.kind === 'villa') {
-          const cat = wish.villa.cat;
+          const cat = wish.villa.removed ? null : wish.villa.cat;
           if (cat) {
             c.addAdoption(wish.villa, cat.data.name, VillaManager.adoptionFee(cat.data));
             cat.meow();
           } else {
             wish.villa.reserved = false;
           }
-        } else if (wish?.slot.def) {
+        } else if (wish?.slot.def && !wish.slot.unit.removed) {
           const def = wish.slot.def;
           const ratio = def.price / (DEFAULT_PRICE[def.id] ?? def.price);
           const chance = ratio <= PRICE_OK ? 1 : Math.max(0, 1 - (ratio - PRICE_OK) / (PRICE_LIMIT - PRICE_OK));

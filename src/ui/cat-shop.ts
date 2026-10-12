@@ -44,7 +44,7 @@ export function createCatShop(parent: HTMLElement, villas: VillaManager): (villa
       .join('');
     sheet.innerHTML = `
       <div class="sheet-header"><h2>Cat shelter</h2><button type="button" class="sheet-close" data-act="close" aria-label="Close">✕</button></div>
-      <p class="hint">Pick a cat for Villa ${target ? target.index + 1 : ''}</p>
+      <p class="hint">Pick a cat to move in</p>
       <div class="cat-list">${cards}</div>
       <button type="button" class="ghost-btn reroll" data-act="reroll" ${money < REROLL_COST ? 'disabled' : ''}>🔄 New cats · $${REROLL_COST}</button>`;
   };

@@ -22,7 +22,7 @@ import { CustomerSystem } from './game/customers';
 import { ShopDoor } from './world/door';
 import { buildCounter } from './world/counter';
 import { gameStore, onPriceChange, setProductPrice } from './game/state';
-import { clearSave, loadSave, writeSave, type SaveData } from './core/save';
+import { clearSave, loadSave, resolveLayout, writeSave, type SaveData } from './core/save';
 import { levelForXp } from './config/progression';
 import { DEFAULT_PRICE, PRODUCTS } from './config/products';
 import { PRODUCT_BY_ID } from './config/products';
@@ -39,6 +39,8 @@ import { createShowcasePanel } from './ui/cat-showcase-ui';
 import { createInfoCard } from './ui/info-card';
 import { createHud } from './ui/hud';
 import { createTablet } from './ui/tablet';
+import { BuildMode } from './game/build-mode';
+import { createBuildBar } from './ui/build-bar';
 import { createCheckoutPanel } from './ui/checkout';
 import { initToasts } from './ui/toast';
 
@@ -87,7 +89,7 @@ const snapshot = (): SaveData => {
     money: st.money,
     xp: st.xp,
     prices: Object.fromEntries(PRODUCTS.filter((p) => p.price !== DEFAULT_PRICE[p.id]).map((p) => [p.id, p.price])),
-    shelfUnits: shelves.ownedIds(),
+    layout: { shelves: shelves.layout(), villas: villas?.villas.map((v) => ({ ...v.spot })) ?? [] },
     shelves: shelves.serialize(),
     villas: villas?.serialize() ?? [],
     boxes: boxes.serialize(),
@@ -95,12 +97,15 @@ const snapshot = (): SaveData => {
   };
 };
 const saved = loadSave();
+const layout = resolveLayout(saved);
+for (const spot of layout.shelves) shelves.addUnit(spot);
+const savedCats = new Map((saved?.villas ?? []).map((v) => [v.id, v.cat]));
+for (const spot of layout.villas) villas?.addVilla(spot, savedCats.get(spot.id) ?? null);
 if (saved) {
   const xp = Math.max(0, saved.xp ?? 0);
   gameStore.setState({ money: saved.money, xp, level: levelForXp(xp) });
   for (const [id, price] of Object.entries(saved.prices ?? {})) setProductPrice(id, price);
-  shelves.restore(saved.shelves ?? [], saved.shelfUnits);
-  villas?.restore(saved.villas ?? []);
+  shelves.restore(saved.shelves ?? []);
   boxes.spawnBoxes(saved.boxes ?? []);
   orders.restore(saved.orders ?? []);
 }
@@ -126,17 +131,23 @@ onSettingsChange((s) => {
   if (s.quality !== gfx.profile.level) gfx.applyQuality(s.quality);
 });
 
-setupLookInput(canvas, view, () => interactions.press(), () => interactions.release());
+const build = new BuildMode(gfx.scene, gfx.camera, shelves, villas, colliders, customers.nav, boxes);
+const press = (): void => {
+  if (build.active) build.confirm();
+  else interactions.press();
+};
+setupLookInput(canvas, view, press, () => !build.active && interactions.release());
 createJoystick(ui, input);
 const crosshair = createCrosshair(ui);
 const actionButton = createActionButton(ui, input);
-input.onActionDown(() => interactions.press());
-input.onActionUp(() => interactions.release());
+input.onActionDown(press);
+input.onActionUp(() => !build.active && interactions.release());
 createSettingsPanel(ui, undefined, resetGame);
 initToasts(ui);
 const hud = createHud(ui);
-createTablet(ui, orders, shelves);
+createTablet(ui, orders);
 createCheckoutPanel(ui, customers);
+createBuildBar(ui, build, villas !== null, () => undefined);
 if (catTestMode) createShowcasePanel(ui, showcase);
 if (villas) openCatShop = createCatShop(ui, villas);
 const infoCard = createInfoCard(ui);
@@ -151,7 +162,7 @@ loop.add((dt) => {
   orders.update(dt);
   boxes.update(dt);
   shelves.update(dt);
-  customers.update(dt);
+  if (!build.active) customers.update(dt); // the shop is paused while building
   const dx = DOOR_INSIDE.x - 0.4;
   door.update(dt, customers.anyNear(dx, DOOR_INSIDE.z, 2.3) || Math.hypot(player.position.x - dx, player.position.z - DOOR_INSIDE.z) < 1.8);
   hud.setDeliveryEta(orders.nextEta);
@@ -163,18 +174,27 @@ loop.add((dt) => {
   hands.update(dt, player.speed, view.lookDelta.x, view.lookDelta.y);
 
   const target = interactions.update(gfx.camera);
-  const label = target?.label() ?? null;
-  actionButton.setLabel(label);
-  crosshair.setOnTarget(label !== null);
-  highlighter.setTarget(interactions.highlightTarget);
-  infoCard.show(target?.info?.() ?? null);
+  if (build.active) {
+    build.update();
+    const label = build.label();
+    actionButton.setLabel(label);
+    crosshair.setOnTarget(label !== null);
+    highlighter.setTarget(null);
+    infoCard.show(null);
+  } else {
+    const label = target?.label() ?? null;
+    actionButton.setLabel(label);
+    crosshair.setOnTarget(label !== null);
+    highlighter.setTarget(interactions.highlightTarget);
+    infoCard.show(target?.info?.() ?? null);
+  }
   highlighter.update(dt);
   ring.update(dt, boxes.placeSpot());
 });
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, snapshot, gameStore, products: PRODUCT_BY_ID };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, build, snapshot, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

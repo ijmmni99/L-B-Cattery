@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { VILLA_SIZE, type VillaSpot } from '../config/villas';
+import { VILLA_SIZE } from '../config/villas';
 import { cachedGeometry, cachedMaterial, cachedTexture, canvasTexture, makeCanvas, mesh, pastel, roundedBox } from '../core/cache';
 
 const { w: W, d: D, platform: P } = VILLA_SIZE;
@@ -27,19 +27,17 @@ function labelMaterial(text: string): THREE.MeshBasicMaterial {
 export interface VillaModel {
   /** Opaque static parts; merged by the manager. */
   frame: THREE.Group;
-  /** Cover that greys out a locked villa. */
-  cover: THREE.Mesh;
   /** Name plate; call `setLabel`. */
   plate: THREE.Mesh;
   setLabel(text: string): void;
-  /** Invisible box covering the whole villa for the "unlock / choose a cat" ray. */
+  /** Invisible box covering the whole villa for the "choose a cat" ray. */
   proxy: THREE.Mesh;
 }
 
 /** A cat villa: wooden platform, three walls, a header beam with a name plate, bed and scratch post. */
-export function buildVilla(spot: VillaSpot): VillaModel {
+export function buildVilla(tint: string): VillaModel {
   const frame = new THREE.Group();
-  const trim = pastel(spot.tint, 0.6);
+  const trim = pastel(tint, 0.6);
   const wood = pastel('#d9a877', 0.7);
   const cream = pastel('#fff4e2', 0.8);
 
@@ -83,16 +81,9 @@ export function buildVilla(spot: VillaSpot): VillaModel {
   postTop.position.set(0.6, P + 0.66, -0.42);
   frame.add(bed, bedDip, postBase, postPole, postTop);
 
-  const plate = new THREE.Mesh(cachedGeometry('villa-plate', () => new THREE.PlaneGeometry(1.0, 0.25)), labelMaterial(spot.id));
+  const plate = new THREE.Mesh(cachedGeometry('villa-plate', () => new THREE.PlaneGeometry(1.0, 0.25)), labelMaterial('Empty'));
   plate.position.set(0, HEADER_Y + P - 0.1, D / 2 - 0.015);
   plate.userData.dynamic = true;
-
-  const cover = new THREE.Mesh(
-    cachedGeometry('villa-cover', () => new THREE.BoxGeometry(W + 0.04, HEADER_Y + 0.2, D + 0.04)),
-    cachedMaterial('villa-cover', () => new THREE.MeshStandardMaterial({ color: '#c9ced6', transparent: true, opacity: 0.72, roughness: 0.9 })),
-  );
-  cover.position.set(0, (HEADER_Y + 0.2) / 2 + P, 0);
-  cover.userData.dynamic = true;
 
   const proxy = new THREE.Mesh(
     cachedGeometry('villa-proxy', () => new THREE.BoxGeometry(W, HEADER_Y, D)),
@@ -103,7 +94,6 @@ export function buildVilla(spot: VillaSpot): VillaModel {
 
   return {
     frame,
-    cover,
     plate,
     proxy,
     setLabel: (text) => {

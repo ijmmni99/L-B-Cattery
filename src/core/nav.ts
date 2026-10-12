@@ -179,4 +179,34 @@ export class NavGrid {
     }
     return out;
   }
+
+  /** First target that can't be walked to from `from` (null = all reachable). */
+  firstUnreachable(from: Pt, targets: Pt[]): Pt | null {
+    this.state.fill(0);
+    const s = this.nearestFree(this.cx(from.x), this.cz(from.z));
+    if (!s) return targets[0] ?? null;
+    const seen = new Uint8Array(this.nx * this.nz);
+    const queue: number[] = [s[1] * this.nx + s[0]];
+    seen[queue[0]] = 1;
+    for (let head = 0; head < queue.length; head++) {
+      const k = queue[head];
+      const ci = k % this.nx;
+      const cj = (k - ci) / this.nx;
+      for (const [di, dj] of DIRS) {
+        const ni = ci + di;
+        const nj = cj + dj;
+        if (this.blocked(ni, nj)) continue;
+        if (di !== 0 && dj !== 0 && (this.blocked(ci + di, cj) || this.blocked(ci, cj + dj))) continue;
+        const nk = nj * this.nx + ni;
+        if (seen[nk]) continue;
+        seen[nk] = 1;
+        queue.push(nk);
+      }
+    }
+    for (const t of targets) {
+      const c = this.nearestFree(this.cx(t.x), this.cz(t.z));
+      if (!c || !seen[c[1] * this.nx + c[0]]) return t;
+    }
+    return null;
+  }
 }

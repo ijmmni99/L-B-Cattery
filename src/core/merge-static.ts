@@ -45,6 +45,7 @@ export function mergeStatic(root: THREE.Object3D): THREE.Group {
       continue;
     }
     const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.merged = true;
     mesh.castShadow = b.cast;
     mesh.receiveShadow = b.receive;
     merged.add(mesh);

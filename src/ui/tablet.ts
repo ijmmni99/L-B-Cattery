@@ -1,9 +1,6 @@
 import { CATEGORIES, PRODUCTS, PRODUCT_BY_ID, boxCost, type ProductDef } from '../config/products';
 import { haptic } from '../core/haptics';
 import { OrderSystem } from '../game/orders';
-import type { ShelfManager } from '../game/shelves';
-import { SHELF_TYPES } from '../config/shelves';
-import { SHELF_SPOTS } from '../world/shelf-layout';
 import { DELIVERY_SECONDS, gameStore, onPriceChange, setProductPrice } from '../game/state';
 import { DEFAULT_PRICE } from '../config/products';
 import { toast } from './toast';
@@ -14,7 +11,6 @@ const TABS: Array<{ id: string; label: string; ready: boolean }> = [
   { id: 'supplies', label: 'Supplies', ready: true },
   { id: 'cats', label: 'Cats', ready: false },
   { id: 'prices', label: 'Prices', ready: true },
-  { id: 'upgrades', label: 'Upgrades', ready: true },
   { id: 'staff', label: 'Staff', ready: false },
 ];
 
@@ -24,7 +20,7 @@ const fmt = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(
  * Tablet: order supplies by the box. Other tabs arrive with later milestones.
  * Opens from the HUD button or the T key.
  */
-export function createTablet(parent: HTMLElement, orders: OrderSystem, shelves: ShelfManager, onOpenChange?: (open: boolean) => void): { open(): void; close(): void } {
+export function createTablet(parent: HTMLElement, orders: OrderSystem, onOpenChange?: (open: boolean) => void): { open(): void; close(): void } {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'hud-icon-button tablet-button';
@@ -45,7 +41,6 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, shelves: 
       <div class="tabs">${TABS.map((t) => `<button type="button" class="tab${t.id === 'supplies' ? ' active' : ''}${t.ready ? '' : ' soon'}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>
       <div class="tab-body supplies-body"></div>
       <div class="tab-body prices-body" hidden></div>
-      <div class="tab-body upgrades-body" hidden></div>
       <div class="tab-body soon-body" hidden><p>Coming soon!</p></div>
       <div class="order-bar">
         <div class="order-total"><span>Total</span><b class="order-total-value">$0</b><small>Delivery in ~${DELIVERY_SECONDS}s</small></div>
@@ -120,40 +115,6 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, shelves: 
   onPriceChange(renderPrices);
   renderPrices();
 
-  const upgradesBody = q<HTMLElement>('.upgrades-body');
-  const renderUpgrades = (): void => {
-    const level = gameStore.getState().level;
-    const money = gameStore.getState().money;
-    const rows = SHELF_SPOTS.filter((sp) => !shelves.isOwned(sp))
-      .map((sp) => {
-        const t = SHELF_TYPES[sp.type];
-        const locked = level < sp.level;
-        const cant = !locked && money < t.cost;
-        return `<div class="product-row upgrade-row">
-          <div class="product-icon" style="background:#e8d5ff">${sp.type === 'bench' ? '🪑' : '🗄️'}</div>
-          <div class="product-info">
-            <div class="product-name">${t.name}</div>
-            <div class="product-sub">${sp.place} · ${t.tiers} tiers × ${t.slotsPerTier} slots</div>
-          </div>
-          <button type="button" class="adopt-btn buy-shelf" data-id="${sp.id}" ${locked || cant ? 'disabled' : ''}>${locked ? `🔒 Lv ${sp.level}` : `$${t.cost}`}</button>
-        </div>`;
-      })
-      .join('');
-    upgradesBody.innerHTML = `<p class="hint">More shelves = more stock on show.</p>${rows || '<p class="hint">Every shelf spot is yours!</p>'}`;
-  };
-  upgradesBody.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.buy-shelf');
-    const spot = SHELF_SPOTS.find((sp) => sp.id === btn?.dataset.id);
-    if (!btn || !spot) return;
-    const res = shelves.buy(spot);
-    if (res.ok) toast(`${SHELF_TYPES[spot.type].name} added!`, 'good');
-    else toast(res.reason, 'bad');
-    renderUpgrades();
-  });
-  gameStore.subscribe(() => {
-    if (!upgradesBody.hidden) renderUpgrades();
-  });
-
   const lines = (): Record<string, number> => Object.fromEntries([...qty].filter(([, n]) => n > 0));
   const refresh = (): void => {
     const total = OrderSystem.total(lines());
@@ -203,11 +164,9 @@ export function createTablet(parent: HTMLElement, orders: OrderSystem, shelves: 
       const id = tab.dataset.tab;
       body.hidden = id !== 'supplies';
       pricesBody.hidden = id !== 'prices';
-      upgradesBody.hidden = id !== 'upgrades';
-      soonBody.hidden = id === 'supplies' || id === 'prices' || id === 'upgrades';
+      soonBody.hidden = id === 'supplies' || id === 'prices';
       (overlay.querySelector('.order-bar') as HTMLElement).hidden = id !== 'supplies';
       if (id === 'prices') renderPrices();
-      if (id === 'upgrades') renderUpgrades();
     });
   }
 

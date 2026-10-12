@@ -882,3 +882,31 @@ input[type='range'].sens {
 .product-row.locked .lock-tag { display: inline-block; }
 .product-row.locked .stepper { display: none; }
 .reset-game { margin-top: 6px; color: #c0392b; }
+
+/* ---------- Build mode ---------- */
+.build-button { right: calc(120px + var(--safe-right)); top: calc(12px + var(--safe-top)); }
+.build-button.on { background: var(--mint); color: #fff; }
+.build-bar {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  top: calc(12px + var(--safe-top)); width: min(560px, calc(100vw - 330px));
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.build-bar[hidden] { display: none; }
+.build-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.build-bar .chip {
+  border: 0; border-radius: 14px; padding: 6px 10px; background: var(--pill-bg); box-shadow: var(--shadow);
+  font: inherit; font-weight: 900; font-size: 13px; color: var(--ink); cursor: pointer;
+  display: inline-flex; flex-direction: column; align-items: center; line-height: 1.15;
+}
+.build-bar .chip small { font-weight: 800; opacity: 0.65; font-size: 11px; }
+.build-bar .chip.active { background: var(--mint-dark); color: #fff; }
+.build-bar .chip.short:not(.active) { opacity: 0.6; }
+.build-bar .chip.done { background: #fff1c9; }
+.build-status {
+  padding: 4px 12px; border-radius: 999px; background: var(--pill-bg); box-shadow: var(--shadow);
+  font-weight: 800; font-size: 12px; text-align: center; min-height: 22px;
+}
+.build-status.bad { background: #ffd9d9; color: #a02020; }
+@media (orientation: portrait) {
+  .build-bar { top: calc(130px + var(--safe-top)); width: calc(100vw - 24px); }
+}

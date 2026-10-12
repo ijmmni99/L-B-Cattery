@@ -7,9 +7,8 @@ import { mergeStatic } from '../core/merge-static';
 import { buildShelfGeometry, type SlotFrame } from '../models/shelf-model';
 import { getProductModel } from '../models/product-factory';
 import type { CollisionWorld } from '../world/colliders';
-import { SHELF_SPOTS, type ShelfSpot } from '../world/shelf-layout';
+import type { ShelfSpot } from '../world/shelf-layout';
 import type { Box, BoxManager } from './boxes';
-import { gameStore, spendMoney } from './state';
 import { PriceTagLayer } from './price-tags';
 import { NO_OUTLINE, type InfoCardData, type Interactable, type InteractionSystem } from './interactions';
 
@@ -111,6 +110,12 @@ export class ShelfUnit {
   readonly width: number;
   readonly depth: number;
   readonly staticGroup: THREE.Group;
+  /** Identity wrapper that holds the merged static frame. */
+  readonly root = new THREE.Group();
+  readonly items: Interactable[] = [];
+  readonly pickBox: THREE.Mesh;
+  colliderId = -1;
+  removed = false;
 
   constructor(readonly spot: ShelfSpot) {
     this.type = SHELF_TYPES[spot.type];
@@ -123,6 +128,10 @@ export class ShelfUnit {
     this.staticGroup.updateMatrixWorld(true);
     this.matrix.copy(this.staticGroup.matrixWorld);
     geo.slots.forEach((f, i) => this.slots.push(new ShelfSlot(this, f, `${spot.id}:${i}`)));
+    this.pickBox = new THREE.Mesh(new THREE.BoxGeometry(geo.width, geo.height, geo.depth), new THREE.MeshBasicMaterial({ visible: false }));
+    this.pickBox.position.set(spot.x, geo.height / 2, spot.z);
+    this.pickBox.rotation.y = spot.yaw;
+    this.pickBox.updateMatrixWorld(true);
   }
 }
 
@@ -213,46 +222,69 @@ export class ShelfManager {
     private readonly onLaunch: () => void = () => {},
   ) {
     this.colliders = colliders;
-    for (const spot of SHELF_SPOTS) if (spot.start) this.addUnit(spot);
-    scene.add(this.frames, this.proxies, this.itemsRoot, this.tags.root, this.marker.mesh);
+    scene.add(this.frames, this.proxies, this.itemsRoot, this.tags.root, this.marker.mesh, this.pickables);
   }
 
   private readonly frames = new THREE.Group();
   private readonly proxies = new THREE.Group();
   private readonly colliders: CollisionWorld;
 
-  isOwned(spot: ShelfSpot): boolean {
-    return this.units.some((u) => u.spot.id === spot.id);
-  }
+  /** Invisible boxes build mode raycasts to select a unit. */
+  readonly pickables = new THREE.Group();
 
-  /** Builds a shelf unit at a spot (start-up, buying, or loading a save). */
-  addUnit(spot: ShelfSpot): ShelfUnit | null {
-    if (this.isOwned(spot)) return null;
+  /** Builds a shelf unit at a spot (start-up, buying, moving, or loading a save). */
+  addUnit(spot: ShelfSpot): ShelfUnit {
     const unit = new ShelfUnit(spot);
     this.units.push(unit);
-    const g = new THREE.Group();
-    g.add(unit.staticGroup);
+    unit.root.add(unit.staticGroup);
     // Collapse the static frame into a few draw calls.
-    g.add(mergeStatic(g));
-    this.frames.add(g);
+    unit.root.updateMatrixWorld(true);
+    unit.root.add(mergeStatic(unit.root));
+    this.frames.add(unit.root);
     for (const slot of unit.slots) {
       this.proxies.add(slot.proxy);
-      this.registerSlot(slot);
+      unit.items.push(this.registerSlot(slot));
     }
     const alongX = Math.abs(Math.sin(spot.yaw)) < 0.5;
-    this.colliders.addCentered(spot.x, spot.z, alongX ? unit.width : unit.depth, alongX ? unit.depth : unit.width);
+    unit.colliderId = this.colliders.addCentered(spot.x, spot.z, alongX ? unit.width : unit.depth, alongX ? unit.depth : unit.width);
+    unit.pickBox.userData.placed = { kind: 'shelf', unit };
+    this.pickables.add(unit.pickBox);
     this.dirty = true;
     return unit;
   }
 
-  /** Spend money on a shelf spot. */
-  buy(spot: ShelfSpot): { ok: true } | { ok: false; reason: string } {
-    if (this.isOwned(spot)) return { ok: false, reason: 'Already owned' };
-    if (gameStore.getState().level < spot.level) return { ok: false, reason: `Unlocks at level ${spot.level}` };
-    if (!spendMoney(SHELF_TYPES[spot.type].cost)) return { ok: false, reason: 'Not enough money' };
-    this.addUnit(spot);
-    haptic([10, 30, 14]);
-    return { ok: true };
+  /**
+   * Takes a unit out of the shop. Returns what was on it so the caller can hand it
+   * back as boxes (nothing is lost).
+   */
+  removeUnit(unit: ShelfUnit): Array<{ productId: string; count: number }> {
+    unit.removed = true;
+    if (this.session?.slot.unit === unit) this.session = null;
+    for (let i = this.flights.length - 1; i >= 0; i--) {
+      const f = this.flights[i];
+      if (f.slot.unit !== unit) continue;
+      f.mesh.visible = false;
+      f.mesh.removeFromParent();
+      this.pool.get(f.def.id)?.push(f.mesh);
+      this.flights.splice(i, 1);
+    }
+    const contents: Array<{ productId: string; count: number }> = [];
+    for (const slot of unit.slots) {
+      const n = slot.count + slot.inflight;
+      if (slot.productId && n > 0) contents.push({ productId: slot.productId, count: n });
+      this.proxies.remove(slot.proxy);
+    }
+    for (const it of unit.items) this.interactions.remove(it);
+    this.colliders.remove(unit.colliderId);
+    unit.root.removeFromParent();
+    unit.root.traverse((o) => {
+      if (o instanceof THREE.Mesh && o.userData.merged) o.geometry.dispose();
+    });
+    unit.pickBox.removeFromParent();
+    this.units.splice(this.units.indexOf(unit), 1);
+    this.marker.hide();
+    this.dirty = true;
+    return contents;
   }
 
   /** Call once per frame. */
@@ -307,9 +339,9 @@ export class ShelfManager {
     this.dirty = true;
   }
 
-  /** Ids of the shelf spots the shop owns. */
-  ownedIds(): string[] {
-    return this.units.map((u) => u.spot.id);
+  /** The shelf layout, for saving. */
+  layout(): ShelfSpot[] {
+    return this.units.map((u) => ({ ...u.spot }));
   }
 
   serialize(): Array<{ id: string; productId: string; count: number }> {
@@ -318,10 +350,7 @@ export class ShelfManager {
     return out;
   }
 
-  restore(saved: Array<{ id: string; productId: string; count: number }>, owned?: string[]): void {
-    // Old saves had every spot: unlock whatever the save mentions.
-    const ids = new Set(owned ?? SHELF_SPOTS.map((sp) => sp.id));
-    for (const sp of SHELF_SPOTS) if (ids.has(sp.id) || saved.some((x) => x.id.startsWith(`${sp.id}:`))) this.addUnit(sp);
+  restore(saved: Array<{ id: string; productId: string; count: number }>): void {
     for (const s of saved) {
       const def = PRODUCT_BY_ID[s.productId];
       if (!def) continue;
@@ -337,7 +366,7 @@ export class ShelfManager {
 
   // ---------------------------------------------------------------- interaction
 
-  private registerSlot(slot: ShelfSlot): void {
+  private registerSlot(slot: ShelfSlot): Interactable {
     const item: Interactable = {
       position: slot.proxy.position,
       object: slot.proxy,
@@ -352,6 +381,7 @@ export class ShelfManager {
       onBlur: () => this.marker.hide(),
     };
     this.interactions.add(item);
+    return item;
   }
 
   private canStock(slot: ShelfSlot): boolean {
