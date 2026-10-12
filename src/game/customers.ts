@@ -58,6 +58,11 @@ export class CustomerSystem {
     interactions.add(item);
   }
 
+  /** True if any customer is within `r` metres of (x, z). */
+  anyNear(x: number, z: number, r: number): boolean {
+    return this.customers.some((c) => Math.hypot(c.position.x - x, c.position.z - z) < r);
+  }
+
   get inStore(): number {
     return this.customers.length;
   }

@@ -9,7 +9,7 @@ import { getSettings, onSettingsChange } from './core/settings';
 import { setupPwa } from './core/pwa';
 import { buildStore } from './world/store';
 import { buildStoreColliders } from './world/store-colliders';
-import { PLAYER_START } from './world/layout';
+import { DOOR_INSIDE, PLAYER_START } from './world/layout';
 import { ViewModel } from './models/viewmodel';
 import { Player } from './game/player';
 import { InteractionSystem } from './game/interactions';
@@ -19,6 +19,7 @@ import { BoxManager } from './game/boxes';
 import { ShelfManager } from './game/shelves';
 import { OrderSystem } from './game/orders';
 import { CustomerSystem } from './game/customers';
+import { ShopDoor } from './world/door';
 import { buildCounter } from './world/counter';
 import { gameStore } from './game/state';
 import { PRODUCT_BY_ID } from './config/products';
@@ -64,6 +65,8 @@ const shelves = new ShelfManager(gfx.scene, colliders, interactions, boxes, () =
 const orders = new OrderSystem(boxes);
 const counter = buildCounter(colliders);
 gfx.scene.add(counter.group);
+const door = new ShopDoor();
+gfx.scene.add(door.group);
 const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter, colliders, player.position);
 const showcase = new CatShowcase(gfx.scene, interactions, colliders);
 
@@ -95,6 +98,8 @@ loop.add((dt) => {
   boxes.update(dt);
   shelves.update(dt);
   customers.update(dt);
+  const dx = DOOR_INSIDE.x - 0.4;
+  door.update(dt, customers.anyNear(dx, DOOR_INSIDE.z, 2.3) || Math.hypot(player.position.x - dx, player.position.z - DOOR_INSIDE.z) < 1.8);
   hud.setDeliveryEta(orders.nextEta);
 });
 loop.add((dt) => {
@@ -115,7 +120,7 @@ loop.add((dt) => {
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, gameStore, products: PRODUCT_BY_ID };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }
