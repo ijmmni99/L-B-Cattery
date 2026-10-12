@@ -13,7 +13,23 @@ export interface Interactable {
   /** Button label, or null when this can't be used right now. */
   label(): string | null;
   act(): void;
+  /** Card shown while targeted (name, details). */
+  info?(): InfoCardData | null;
+  onFocus?(): void;
+  onBlur?(): void;
 }
+
+export interface InfoCardData {
+  /** Changes whenever the card content should re-render. */
+  key: string;
+  title: string;
+  badge?: { text: string; color: string };
+  sub?: string;
+  tag?: string;
+}
+
+/** Highlight target that outlines nothing (for markers drawn another way). */
+export const NO_OUTLINE = new THREE.Object3D();
 
 /** Max distance from the eye to an object to use it. */
 export const REACH = 2.5;
@@ -42,7 +58,10 @@ export class InteractionSystem {
 
   remove(item: Interactable): void {
     this.items.delete(item);
-    if (this.current === item) this.current = null;
+    if (this.current === item) {
+      item.onBlur?.();
+      this.current = null;
+    }
   }
 
   update(camera: THREE.Camera): Interactable | null {
@@ -69,7 +88,12 @@ export class InteractionSystem {
         if (best) break;
       }
     }
-    this.current = best ?? ambient;
+    const next = best ?? ambient;
+    if (next !== this.current) {
+      this.current?.onBlur?.();
+      this.current = next;
+      next?.onFocus?.();
+    }
     return this.current;
   }
 

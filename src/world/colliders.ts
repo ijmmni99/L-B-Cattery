@@ -30,6 +30,14 @@ export class CollisionWorld {
     this.boxes.delete(id);
   }
 
+  /** True if an axis-aligned box centred on (x, z) overlaps any collider. */
+  overlapsBox(x: number, z: number, halfW: number, halfD: number): boolean {
+    for (const b of this.boxes.values()) {
+      if (x + halfW > b.minX && x - halfW < b.maxX && z + halfD > b.minZ && z - halfD < b.maxZ) return true;
+    }
+    return false;
+  }
+
   /** Pushes a circle out of every overlapping box (in place). */
   resolveCircle(pos: THREE.Vector3, radius: number): void {
     for (let iter = 0; iter < 3; iter++) {

@@ -1,5 +1,4 @@
-import { BREED_BY_ID, RARITIES, type CatActivityId } from '../config/cats';
-import type { CatData } from '../game/cat-data';
+import type { CatActivityId } from '../config/cats';
 import type { CatShowcase } from '../game/cat-showcase';
 
 const ACTIONS: Array<[CatActivityId | null, string]> = [
@@ -34,32 +33,4 @@ export function createShowcasePanel(parent: HTMLElement, showcase: CatShowcase):
     showcase.forceAll(act);
     for (const b of panel.querySelectorAll('[data-act]')) b.classList.toggle('active', b === btn);
   });
-}
-
-export interface CatInfoCard {
-  show(cat: CatData | null): void;
-}
-
-/** Top-centre card with the targeted cat's name, breed, rarity and personality. */
-export function createCatInfoCard(parent: HTMLElement): CatInfoCard {
-  const el = document.createElement('div');
-  el.className = 'cat-card';
-  parent.appendChild(el);
-  let currentId: string | null = null;
-  return {
-    show(cat) {
-      const id = cat?.id ?? null;
-      if (id === currentId) return;
-      currentId = id;
-      el.classList.toggle('visible', cat !== null);
-      if (!cat) return;
-      const breed = BREED_BY_ID[cat.appearance.breedId];
-      const coat = breed?.coats[cat.appearance.coatIndex]?.name ?? '';
-      const r = RARITIES[cat.rarity];
-      el.innerHTML = `
-        <div class="cat-card-name">${cat.name}<span class="rarity" style="background:${r.color}">${r.label}</span></div>
-        <div class="cat-card-sub">${breed?.name ?? ''} · ${coat}</div>
-        <div class="cat-card-tag">${cat.personality}</div>`;
-    },
-  };
 }

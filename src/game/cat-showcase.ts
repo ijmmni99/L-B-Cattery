@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CatActivityId } from '../config/cats';
+import { BREED_BY_ID, RARITIES, type CatActivityId } from '../config/cats';
 import { cachedGeometry, mesh, pastel } from '../core/cache';
 import { haptic } from '../core/haptics';
 import type { RoamArea } from './cat-behavior';
@@ -63,12 +63,6 @@ export class CatShowcase {
     this.cats.forEach((c, i) => setTimeout(() => c.meow(), i * 120));
   }
 
-  catFor(item: Interactable | null): CatEntity | null {
-    if (!item) return null;
-    const i = this.interactables.indexOf(item);
-    return i >= 0 ? this.cats[i] : null;
-  }
-
   update(dt: number): void {
     for (const c of this.cats) c.update(dt);
   }
@@ -87,6 +81,17 @@ export class CatShowcase {
         object: cat.hitProxy,
         highlight: cat.model.mesh,
         label: () => 'Play',
+        info: () => {
+          const breed = BREED_BY_ID[cat.data.appearance.breedId];
+          const r = RARITIES[cat.data.rarity];
+          return {
+            key: cat.data.id,
+            title: cat.data.name,
+            badge: { text: r.label, color: r.color },
+            sub: `${breed?.name ?? ''} · ${breed?.coats[cat.data.appearance.coatIndex]?.name ?? ''}`,
+            tag: cat.data.personality,
+          };
+        },
         act: () => {
           cat.play();
           haptic([12, 40, 12]);

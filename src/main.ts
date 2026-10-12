@@ -16,14 +16,23 @@ import { Player } from './game/player';
 import { InteractionSystem } from './game/interactions';
 import { Highlighter } from './game/highlight';
 import { TargetRing } from './game/target-ring';
-import { createDemoCrate } from './game/demo-crate';
+import { BoxManager } from './game/boxes';
+import { ShelfManager } from './game/shelves';
+import { OrderSystem } from './game/orders';
+import { gameStore } from './game/state';
+import { PRODUCT_BY_ID } from './config/products';
+import { buildDeliveryPad } from './world/delivery-pad';
 import { CatShowcase } from './game/cat-showcase';
 import { createJoystick } from './ui/joystick';
 import { createActionButton } from './ui/action-button';
 import { createCrosshair } from './ui/crosshair';
 import { setupLookInput } from './ui/look-input';
 import { createSettingsPanel } from './ui/settings-panel';
-import { createCatInfoCard, createShowcasePanel } from './ui/cat-showcase-ui';
+import { createShowcasePanel } from './ui/cat-showcase-ui';
+import { createInfoCard } from './ui/info-card';
+import { createHud } from './ui/hud';
+import { createTablet } from './ui/tablet';
+import { initToasts } from './ui/toast';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene');
 const ui = document.querySelector<HTMLDivElement>('#ui');
@@ -47,7 +56,10 @@ const interactions = new InteractionSystem();
 const highlighter = new Highlighter();
 const ring = new TargetRing();
 gfx.scene.add(ring.mesh);
-const crate = createDemoCrate(gfx.scene, player, interactions, colliders, new THREE.Vector3(-3.6, 0, 2.6));
+gfx.scene.add(buildDeliveryPad());
+const boxes = new BoxManager(gfx.scene, player, interactions, colliders);
+const shelves = new ShelfManager(gfx.scene, colliders, interactions, boxes);
+const orders = new OrderSystem(boxes);
 const showcase = new CatShowcase(gfx.scene, interactions, colliders);
 
 // Re-apply now that lights and meshes exist so shadow settings match the profile.
@@ -65,12 +77,20 @@ const crosshair = createCrosshair(ui);
 const actionButton = createActionButton(ui, input);
 input.onAction(() => interactions.trigger());
 createSettingsPanel(ui);
-createShowcasePanel(ui, showcase);
-const catCard = createCatInfoCard(ui);
+initToasts(ui);
+const hud = createHud(ui);
+createTablet(ui, orders);
+if (new URLSearchParams(location.search).get('cats') === '1') createShowcasePanel(ui, showcase);
+const infoCard = createInfoCard(ui);
 
 const loop = new GameLoop(() => gfx.render());
 loop.add(store.update);
 loop.add((dt) => showcase.update(dt));
+loop.add((dt) => {
+  orders.update(dt);
+  shelves.update(dt);
+  hud.setDeliveryEta(orders.nextEta);
+});
 loop.add((dt) => {
   input.update();
   player.update(dt, input, colliders);
@@ -82,14 +102,14 @@ loop.add((dt) => {
   actionButton.setLabel(label);
   crosshair.setOnTarget(label !== null);
   highlighter.setTarget(interactions.highlightTarget);
-  catCard.show(showcase.catFor(target)?.data ?? null);
+  infoCard.show(target?.info?.() ?? null);
   highlighter.update(dt);
-  ring.update(dt, crate.placeSpot());
+  ring.update(dt, boxes.placeSpot());
 });
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

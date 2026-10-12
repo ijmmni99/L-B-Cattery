@@ -15,7 +15,7 @@ npm run build      # typecheck + production build to dist/
 npm run preview    # serve the production build (PWA/offline works here)
 ```
 
-Add `?debug=1` to the URL for the FPS / draw-call counter.
+Add `?debug=1` to the URL for the FPS / draw-call counter, `?cats=1` for the cat animation test panel.
 
 ## Deploy
 
@@ -41,7 +41,7 @@ src/
 - [x] M1 Store shell and look
 - [x] M2 Player and controls (first-person)
 - [x] M3 Cats (CatBuilder)
-- [ ] M4 Products and shelves
+- [x] M4 Products and shelves
 - [ ] M5 Customers and checkout
 - [ ] M6 Villas
 - [ ] M7 Economy and progression
