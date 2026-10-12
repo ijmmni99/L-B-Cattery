@@ -67,19 +67,55 @@ const flapMaterial = (): THREE.Material =>
   cachedMaterial('carton-flap-mat', () => new THREE.MeshStandardMaterial({ color: '#e6b97f', roughness: 0.85 }));
 
 interface ItemLayout {
+  /** Item lies on its back (label facing up) instead of standing. */
+  flat: boolean;
   cols: number;
   rows: number;
+  layers: number;
   scale: number;
+  /** Packed footprint / height of one item after orientation (before scale). */
+  a: number;
+  b: number;
+  c: number;
 }
 
+const GAP = 0.008;
+const MAX_ITEM_TOP = BH - 0.05;
+
+/**
+ * Packs `def.boxSize` items inside the carton: tries standing and lying
+ * orientations and every cols x rows grid, keeping the largest scale at
+ * which the whole stack stays below the rim.
+ */
 function layoutFor(def: ProductDef): ItemLayout {
-  const [w, , d] = def.size;
+  const [w, h, d] = def.size;
   const innerW = BW - T * 2 - 0.02;
   const innerD = BD - T * 2 - 0.02;
-  const scale = Math.min(1, innerW / w, innerD / d);
-  const cols = Math.max(1, Math.floor(innerW / (w * scale + 0.008)));
-  const rows = Math.max(1, Math.floor(innerD / (d * scale + 0.008)));
-  return { cols, rows, scale };
+  const maxH = MAX_ITEM_TOP - T;
+  let best: ItemLayout | null = null;
+  for (const flat of [false, true]) {
+    const a = w;
+    const b = flat ? d : h;
+    const c = flat ? h : d;
+    for (let cols = 1; cols <= 8; cols++) {
+      for (let rows = 1; rows <= 8; rows++) {
+        const layers = Math.ceil(def.boxSize / (cols * rows));
+        const scale = Math.min(
+          1,
+          (innerW - (cols - 1) * GAP) / (cols * a),
+          (innerD - (rows - 1) * GAP) / (rows * c),
+          maxH / (layers * b),
+        );
+        // Prefer bigger items; on ties prefer shorter stacks, then upright.
+        const better =
+          !best ||
+          scale > best.scale + 1e-3 ||
+          (Math.abs(scale - best.scale) <= 1e-3 && (layers < best.layers || (layers === best.layers && !flat && best.flat)));
+        if (better) best = { flat, cols, rows, layers, scale, a, b, c };
+      }
+    }
+  }
+  return best as ItemLayout;
 }
 
 /**
@@ -108,6 +144,7 @@ export class CartonView {
     private count: number,
   ) {
     this.layout = layoutFor(def);
+    if (this.layout.flat) this.quat.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
     this.closed = new THREE.Mesh(cartonGeometry(), cartonMaterial(def));
     this.closed.castShadow = true;
     this.closed.receiveShadow = true;
@@ -171,7 +208,8 @@ export class CartonView {
   /** World position where item `i` currently sits (box local -> world). */
   itemWorldPosition(i: number, out: THREE.Vector3): THREE.Vector3 {
     const { x, y, z } = this.itemLocal(i);
-    return out.set(x, y + this.def.size[1] * 0.5, z).applyMatrix4(this.group.matrixWorld);
+    const { b, scale } = this.layout;
+    return out.set(x, y + (this.layout.flat ? 0 : b * scale * 0.5), z).applyMatrix4(this.group.matrixWorld);
   }
 
   update(dt: number): void {
@@ -188,18 +226,21 @@ export class CartonView {
     }
   }
 
+  /** Origin (bottom centre of an upright item, centre of a lying one) for item `i`. */
   private itemLocal(i: number): { x: number; y: number; z: number } {
-    const { cols, rows, scale } = this.layout;
-    const [w, h, d] = this.def.size;
+    const { cols, rows, scale, a, b, c, flat } = this.layout;
     const perLayer = cols * rows;
     const layer = Math.floor(i / perLayer);
     const idx = i % perLayer;
     const col = idx % cols;
     const row = Math.floor(idx / cols);
+    const base = T + layer * b * scale;
     return {
-      x: (col - (cols - 1) / 2) * (w * scale + 0.008),
-      y: T + layer * h * scale,
-      z: (row - (rows - 1) / 2) * (d * scale + 0.008),
+      x: (col - (cols - 1) / 2) * (a * scale + GAP),
+      // Lying items rotate about their origin, which sits mid-thickness.
+      y: flat ? base + (b * scale) / 2 : base,
+      // ...and their long side runs along z, so shift to centre it in the row.
+      z: (row - (rows - 1) / 2) * (c * scale + GAP) + (flat ? (c * scale) / 2 : 0),
     };
   }
 
