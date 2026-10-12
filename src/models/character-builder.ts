@@ -110,6 +110,11 @@ export class Character {
   private time = Math.random() * 10;
   private carryBlend = 0;
   carrying = false;
+  /** 0..1 reach toward a shelf with the right arm. */
+  reach = 0;
+  /** Multiplies stride amplitude (NPCs walk slowly but should still swing visibly). */
+  gait = 1;
+  private reachBlend = 0;
 
   constructor(params: CharacterParams) {
     const mat = partMaterial();
@@ -143,7 +148,8 @@ export class Character {
   /** `speed` in m/s drives stride; 0 = idle. */
   animate(dt: number, speed: number): void {
     this.time += dt;
-    const moving = Math.min(speed / 3.5, 1);
+    const moving = Math.min((speed * this.gait) / 3.5, 1);
+    this.reachBlend += (this.reach - this.reachBlend) * Math.min(dt * 8, 1);
     this.phase += dt * (4 + speed * 2.2);
     this.carryBlend += ((this.carrying ? 1 : 0) - this.carryBlend) * Math.min(dt * 10, 1);
 
@@ -156,14 +162,14 @@ export class Character {
     this.body.position.y = bob;
     this.body.scale.y = 1 + breathe;
     this.body.rotation.z = Math.sin(this.phase) * 0.04 * moving;
-    this.body.rotation.x = 0.06 * moving;
+    this.body.rotation.x = 0.06 * moving + 0.12 * this.reachBlend;
     this.head.rotation.y = Math.sin(this.time * 0.6) * 0.12 * (1 - moving);
 
     // Arms: swing while walking, reach forward while carrying.
     const armSwing = -swing * 0.8 * (1 - this.carryBlend);
     const carryPitch = -1.25 * this.carryBlend;
     this.armL.rotation.x = armSwing + carryPitch;
-    this.armR.rotation.x = -armSwing + carryPitch;
+    this.armR.rotation.x = -armSwing + carryPitch - 1.1 * this.reachBlend;
     this.armL.rotation.z = -0.08 - 0.05 * (1 - moving) + 0.22 * this.carryBlend;
     this.armR.rotation.z = 0.08 + 0.05 * (1 - moving) - 0.22 * this.carryBlend;
   }

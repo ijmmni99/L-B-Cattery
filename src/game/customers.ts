@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { CUSTOMERS } from '../config/customers';
 import { haptic } from '../core/haptics';
+import { NavGrid } from '../core/nav';
 import type { CheckoutCounter } from '../world/counter';
-import { DOOR_INSIDE, DOOR_OUTSIDE, QUEUE } from '../world/layout';
+import type { CollisionWorld } from '../world/colliders';
+import { DOOR_INSIDE, DOOR_OUTSIDE, QUEUE, STORE } from '../world/layout';
 import { toast } from '../ui/toast';
 import { Customer } from './customer';
 import type { InfoCardData, Interactable, InteractionSystem } from './interactions';
@@ -11,7 +13,8 @@ import { addMoney } from './state';
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 const V = new THREE.Vector3();
-const ANCHOR = { bubbleAnchor: new THREE.Vector3() };
+const ANCHOR = new THREE.Vector3();
+const YIELD_DIST = 0.7;
 
 export interface ShopStats {
   served: number;
@@ -28,22 +31,28 @@ export class CustomerSystem {
   private readonly customers: Customer[] = [];
   private readonly queue: Customer[] = [];
   private spawnTimer: number = CUSTOMERS.firstDelay;
+  private readonly nav: NavGrid;
+  /** Set by the checkout panel; called when the player starts serving the first customer. */
+  onCheckout: ((c: Customer) => void) | null = null;
 
   constructor(
     private readonly scene: THREE.Scene,
     private readonly shelves: ShelfManager,
     interactions: InteractionSystem,
     counter: CheckoutCounter,
+    colliders: CollisionWorld,
+    private readonly playerPos: THREE.Vector3,
   ) {
+    this.nav = new NavGrid(colliders, STORE.minX, STORE.minZ, STORE.maxX, STORE.maxZ);
     const item: Interactable = {
       position: counter.group.position,
       object: counter.register,
       highlight: counter.register,
       label: () => {
         const c = this.head();
-        return c ? `Checkout · $${c.total.toFixed(2)}` : null;
+        return c ? 'Serve customer' : null;
       },
-      act: () => this.checkout(),
+      act: () => this.beginCheckout(),
       info: () => this.infoFor(),
     };
     interactions.add(item);
@@ -67,6 +76,7 @@ export class CustomerSystem {
     for (let i = this.customers.length - 1; i >= 0; i--) {
       const c = this.customers[i];
       c.update(dt, ANCHOR);
+      this.yieldTo(c, dt);
       this.think(c, dt);
       if (c.stage === 'leaving' && c.idle) {
         this.scene.remove(c.root, c.bubble.sprite);
@@ -85,13 +95,13 @@ export class CustomerSystem {
       const j = Math.floor(Math.random() * (i + 1));
       [slots[i], slots[j]] = [slots[j], slots[i]];
     }
-    const c = new Customer(V.set(DOOR_OUTSIDE.x, 0, DOOR_OUTSIDE.z));
+    const c = new Customer(V.set(DOOR_OUTSIDE.x, 0, DOOR_OUTSIDE.z), this.nav);
     const n = Math.min(slots.length, CUSTOMERS.minWishes + Math.floor(Math.random() * (CUSTOMERS.maxWishes - CUSTOMERS.minWishes + 1)));
     for (const slot of slots.slice(0, n)) {
       const cheap = (slot.def?.price ?? 99) <= 5;
       c.wishes.push({ slot, qty: 1 + Math.floor(Math.random() * (cheap ? 3 : 2)) });
     }
-    c.walkTo([DOOR_INSIDE]);
+    c.walkRaw([DOOR_INSIDE]);
     this.scene.add(c.root, c.bubble.sprite);
     this.customers.push(c);
   }
@@ -107,17 +117,19 @@ export class CustomerSystem {
         }
         const stand = this.shelves.standPoint(wish.slot, V);
         const front = Math.atan2(wish.slot.proxy.position.x - stand.x, wish.slot.proxy.position.z - stand.z);
-        c.walkTo([{ x: stand.x, z: stand.z }], front);
+        c.goTo(stand.x, stand.z, front);
         c.stage = 'browse';
         return;
       }
       case 'browse':
         if (!c.idle) return;
         c.pause(rand(CUSTOMERS.browseMin, CUSTOMERS.browseMax));
+        c.character.reach = 1;
         c.stage = 'pick';
         return;
       case 'pick': {
         if (!c.idle) return;
+        c.character.reach = 0;
         const wish = c.wishes.shift();
         if (wish?.slot.def) {
           const def = wish.slot.def;
@@ -148,7 +160,7 @@ export class CustomerSystem {
         return;
       }
       default:
-        return;
+        return; // 'paying' / 'leaving' need no thinking
     }
   }
 
@@ -166,7 +178,7 @@ export class CustomerSystem {
     this.queue.forEach((c, k) => {
       if (c.spotIndex === k) return;
       c.spotIndex = k;
-      c.walkTo([{ x: QUEUE.x - k * QUEUE.step, z: QUEUE.z }], 0);
+      c.goTo(QUEUE.x - k * QUEUE.step, QUEUE.z, 0);
       if (c.stage === 'waiting') c.stage = 'queue';
     });
   }
@@ -174,7 +186,7 @@ export class CustomerSystem {
   private leave(c: Customer): void {
     c.stage = 'leaving';
     c.spotIndex = -1;
-    c.walkTo([DOOR_INSIDE, DOOR_OUTSIDE]);
+    c.goTo(DOOR_INSIDE.x, DOOR_INSIDE.z, null, [DOOR_OUTSIDE]);
   }
 
   private walkOut(c: Customer): void {
@@ -187,23 +199,50 @@ export class CustomerSystem {
 
   // ------------------------------------------------------------------ checkout
 
-  private head(): Customer | null {
+  head(): Customer | null {
     const c = this.queue[0];
     return c && c.stage === 'waiting' ? c : null;
   }
 
-  private checkout(): void {
+  private beginCheckout(): void {
     const c = this.head();
     if (!c) return;
-    const total = c.total;
-    addMoney(total);
+    c.stage = 'paying';
+    this.onCheckout?.(c);
+  }
+
+  /** Player closed the register without finishing: the customer keeps waiting. */
+  cancelCheckout(c: Customer): void {
+    if (c.stage === 'paying') c.stage = 'waiting';
+  }
+
+  /** Sale done. `extra` = tip (+) or change overpaid (-). */
+  completeCheckout(c: Customer, extra: number): void {
+    const gain = Math.round((c.total + extra) * 100) / 100;
+    addMoney(gain);
     this.stats.served++;
-    this.stats.earned += total;
-    this.queue.shift();
-    c.bubble.show('😊');
-    toast(`+$${total.toFixed(2)} · ${c.itemCount} item${c.itemCount === 1 ? '' : 's'}`, 'good');
+    this.stats.earned += gain;
+    const q = this.queue.indexOf(c);
+    if (q >= 0) this.queue.splice(q, 1);
+    c.bubble.show(extra > 0 ? '😍' : '😊');
+    toast(`+$${gain.toFixed(2)}${extra > 0 ? ` (tip $${extra})` : ''}`, 'good');
     haptic([12, 30, 16]);
     this.leave(c);
+  }
+
+  /** Walking customers step around the player and each other instead of through them. */
+  private yieldTo(c: Customer, dt: number): void {
+    if (!c.moving) return;
+    const give = (ox: number, oz: number): void => {
+      const dx = c.position.x - ox;
+      const dz = c.position.z - oz;
+      const d = Math.hypot(dx, dz);
+      if (d >= YIELD_DIST || d < 1e-4) return;
+      const push = (YIELD_DIST - d) * Math.min(1, dt * 6);
+      c.push((dx / d) * push, (dz / d) * push);
+    };
+    give(this.playerPos.x, this.playerPos.z);
+    for (const o of this.customers) if (o !== c) give(o.position.x, o.position.z);
   }
 
   private infoFor(): InfoCardData | null {
@@ -212,7 +251,7 @@ export class CustomerSystem {
     const mood = c.patience < CUSTOMERS.impatientBelow ? '😠 Impatient' : '😊 Happy';
     return {
       key: `cust:${c.itemCount}:${c.total}:${mood}`,
-      title: 'Customer ready to pay',
+      title: 'Customer at the register',
       sub: c.basket.map((l) => `${l.qty}× ${l.def.name}`).join(', '),
       tag: mood,
     };

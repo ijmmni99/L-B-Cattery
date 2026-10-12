@@ -33,6 +33,7 @@ import { createShowcasePanel } from './ui/cat-showcase-ui';
 import { createInfoCard } from './ui/info-card';
 import { createHud } from './ui/hud';
 import { createTablet } from './ui/tablet';
+import { createCheckoutPanel } from './ui/checkout';
 import { initToasts } from './ui/toast';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene');
@@ -63,7 +64,7 @@ const shelves = new ShelfManager(gfx.scene, colliders, interactions, boxes, () =
 const orders = new OrderSystem(boxes);
 const counter = buildCounter(colliders);
 gfx.scene.add(counter.group);
-const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter);
+const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter, colliders, player.position);
 const showcase = new CatShowcase(gfx.scene, interactions, colliders);
 
 // Re-apply now that lights and meshes exist so shadow settings match the profile.
@@ -82,6 +83,7 @@ createSettingsPanel(ui);
 initToasts(ui);
 const hud = createHud(ui);
 createTablet(ui, orders);
+createCheckoutPanel(ui, customers);
 if (new URLSearchParams(location.search).get('cats') === '1') createShowcasePanel(ui, showcase);
 const infoCard = createInfoCard(ui);
 
@@ -113,7 +115,7 @@ loop.add((dt) => {
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, gameStore, products: PRODUCT_BY_ID };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

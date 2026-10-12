@@ -3,10 +3,11 @@ import { CUSTOMERS } from '../config/customers';
 import type { ProductDef } from '../config/products';
 import { cachedGeometry, mesh, pastel, roundedBox } from '../core/cache';
 import type { ShelfSlot } from './shelves';
+import type { NavGrid } from '../core/nav';
 import { MeowBubble } from '../models/cat/meow-bubble';
 import { Character, randomCharacterParams, type CharacterParams } from '../models/character-builder';
 
-export type CustomerStage = 'shop' | 'browse' | 'pick' | 'queue' | 'waiting' | 'leaving';
+export type CustomerStage = 'shop' | 'browse' | 'pick' | 'queue' | 'waiting' | 'paying' | 'leaving';
 
 export interface BasketLine {
   def: ProductDef;
@@ -21,7 +22,8 @@ function lookFor(i: number): CharacterParams {
 }
 let lookCounter = Math.floor(Math.random() * 12);
 
-const TURN_RATE = 8;
+const TURN_RATE = 6;
+const ACCEL = 2.6;
 const tmp = new THREE.Vector3();
 
 function basketMesh(): THREE.Group {
@@ -33,7 +35,7 @@ function basketMesh(): THREE.Group {
   return g;
 }
 
-/** A walking shopper: route-following character with a shopping basket and a mood bubble. */
+/** A walking shopper: smooth path-following character with a basket and a mood bubble. */
 export class Customer {
   readonly character: Character;
   readonly root: THREE.Group;
@@ -45,7 +47,11 @@ export class Customer {
   wishes: Array<{ slot: ShelfSlot; qty: number }> = [];
   spotIndex = -1;
   patience: number = CUSTOMERS.patience;
+  /** Units scanned so far at the register, per product id. */
+  readonly scanned = new Map<string, number>();
+  payment: { method: 'cash' | 'card'; tender: number } | null = null;
   speed = 0;
+  private readonly cruise = CUSTOMERS.walkSpeed * (0.8 + Math.random() * 0.35);
   private route: THREE.Vector3[] = [];
   private faceYaw: number | null = null;
   private wait = 0;
@@ -53,11 +59,13 @@ export class Customer {
   private bubbleTimer = 2;
   private readonly basketMesh = basketMesh();
 
-  constructor(start: THREE.Vector3) {
+  constructor(start: THREE.Vector3, private readonly nav: NavGrid) {
     this.character = new Character(lookFor(lookCounter++));
+    this.character.gait = 2.4;
     this.root = this.character.root;
     this.position.copy(start);
     this.root.position.copy(start);
+    this.yaw = Math.PI / 2;
     this.character.carryAnchor.add(this.basketMesh);
     this.basketMesh.visible = false;
   }
@@ -72,6 +80,12 @@ export class Customer {
     return this.basket.reduce((n, l) => n + l.qty, 0);
   }
 
+  get scannedCount(): number {
+    let n = 0;
+    for (const v of this.scanned.values()) n += v;
+    return n;
+  }
+
   add(def: ProductDef, qty: number): void {
     const line = this.basket.find((l) => l.def.id === def.id);
     if (line) line.qty += qty;
@@ -80,10 +94,17 @@ export class Customer {
     this.basketMesh.visible = true;
   }
 
-  /** Replace the route; `face` = yaw to turn to on arrival. */
-  walkTo(points: Array<{ x: number; z: number }>, face: number | null = null): void {
-    this.route = points.map((p) => new THREE.Vector3(p.x, 0, p.z));
+  /** Walk to (x, z) around obstacles, optionally via raw points past the door, then face `face`. */
+  goTo(x: number, z: number, face: number | null = null, raw: Array<{ x: number; z: number }> = []): void {
+    const path = this.nav.findPath({ x: this.position.x, z: this.position.z }, { x, z });
+    this.route = [...path, ...raw].map((p) => new THREE.Vector3(p.x, 0, p.z));
     this.faceYaw = face;
+  }
+
+  /** Straight walk (no nav), used on the pavement outside the shop. */
+  walkRaw(points: Array<{ x: number; z: number }>): void {
+    this.route = points.map((p) => new THREE.Vector3(p.x, 0, p.z));
+    this.faceYaw = null;
   }
 
   pause(seconds: number): void {
@@ -95,37 +116,58 @@ export class Customer {
     return this.route.length === 0 && this.wait <= 0 && this.speed < 0.05;
   }
 
+  get moving(): boolean {
+    return this.route.length > 0;
+  }
+
   turnToward(yaw: number): void {
     this.faceYaw = yaw;
   }
 
-  update(dt: number, scene: { bubbleAnchor: THREE.Vector3 }): void {
-    this.speed = 0;
+  /** Nudge sideways (used to yield to others); ignored while standing. */
+  push(x: number, z: number): void {
+    this.position.x += x;
+    this.position.z += z;
+  }
+
+  update(dt: number, anchor: THREE.Vector3): void {
     if (this.wait > 0) this.wait -= dt;
+    let desired = 0;
     const next = this.route[0];
     if (next) {
       tmp.subVectors(next, this.position);
       tmp.y = 0;
       const dist = tmp.length();
-      const step = CUSTOMERS.walkSpeed * dt;
-      if (dist <= step) {
-        this.position.copy(next);
+      const last = this.route.length === 1;
+      if (dist < (last ? 0.05 : 0.22)) {
         this.route.shift();
+        if (last) this.position.copy(next);
       } else {
-        tmp.multiplyScalar(1 / dist);
-        this.position.addScaledVector(tmp, step);
-        this.turn(Math.atan2(tmp.x, tmp.z), dt);
-        this.speed = CUSTOMERS.walkSpeed;
+        const want = Math.atan2(tmp.x, tmp.z);
+        this.turn(want, dt);
+        let diff = want - this.yaw;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        // Slow for tight turns and ease into the final stop.
+        const align = Math.max(0, Math.cos(diff));
+        desired = this.cruise * (0.25 + 0.75 * align * align);
+        if (last) desired = Math.min(desired, 0.3 + dist * 1.6);
       }
     } else if (this.faceYaw !== null) {
       this.turn(this.faceYaw, dt);
     }
+    // Accelerate toward the desired speed rather than snapping to it.
+    const dv = desired - this.speed;
+    this.speed += Math.sign(dv) * Math.min(Math.abs(dv), ACCEL * dt);
+    if (this.speed > 0.01) {
+      this.position.x += Math.sin(this.yaw) * this.speed * dt;
+      this.position.z += Math.cos(this.yaw) * this.speed * dt;
+    }
     this.root.position.copy(this.position);
     this.root.rotation.y = this.yaw;
-    this.character.animate(dt, this.speed);
 
-    scene.bubbleAnchor.set(this.position.x, 2.0, this.position.z);
-    this.bubble.update(dt, scene.bubbleAnchor);
+    this.character.animate(dt, this.speed);
+    anchor.set(this.position.x, 2.0, this.position.z);
+    this.bubble.update(dt, anchor);
   }
 
   /** Pop a mood bubble every few seconds while `text` is set. */
