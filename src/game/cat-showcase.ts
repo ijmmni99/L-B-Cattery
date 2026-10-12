@@ -29,7 +29,9 @@ export class CatShowcase {
     scene: THREE.Scene,
     private readonly interactions: InteractionSystem,
     colliders: CollisionWorld,
+    enabled = true,
   ) {
+    if (!enabled) return;
     // Round cushioned stage so cats sit nearer eye level (like villas will).
     const { x, z } = this.area.center;
     const base = mesh(cachedGeometry('stage-base', () => new THREE.CylinderGeometry(STAGE_R, STAGE_R + 0.06, STAGE_H - 0.08, 56)), pastel('#f6e3cf', 0.8));

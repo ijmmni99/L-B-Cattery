@@ -25,6 +25,8 @@ import { gameStore } from './game/state';
 import { PRODUCT_BY_ID } from './config/products';
 import { buildDeliveryPad } from './world/delivery-pad';
 import { CatShowcase } from './game/cat-showcase';
+import { VillaManager, type Villa } from './game/villas';
+import { createCatShop } from './ui/cat-shop';
 import { createJoystick } from './ui/joystick';
 import { createActionButton } from './ui/action-button';
 import { createCrosshair } from './ui/crosshair';
@@ -68,7 +70,11 @@ gfx.scene.add(counter.group);
 const door = new ShopDoor();
 gfx.scene.add(door.group);
 const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter, colliders, player.position);
-const showcase = new CatShowcase(gfx.scene, interactions, colliders);
+const catTestMode = new URLSearchParams(location.search).get('cats') === '1';
+// Debug cat stage (?cats=1) and the real villas share the middle of the shop, so only one is built.
+const showcase = new CatShowcase(gfx.scene, interactions, colliders, catTestMode);
+let openCatShop: (villa: Villa) => void = () => undefined;
+const villas = catTestMode ? null : new VillaManager(gfx.scene, colliders, interactions, (v) => openCatShop(v));
 
 // Re-apply now that lights and meshes exist so shadow settings match the profile.
 gfx.applyQuality(getSettings().quality);
@@ -87,12 +93,16 @@ initToasts(ui);
 const hud = createHud(ui);
 createTablet(ui, orders);
 createCheckoutPanel(ui, customers);
-if (new URLSearchParams(location.search).get('cats') === '1') createShowcasePanel(ui, showcase);
+if (catTestMode) createShowcasePanel(ui, showcase);
+if (villas) openCatShop = createCatShop(ui, villas);
 const infoCard = createInfoCard(ui);
 
 const loop = new GameLoop(() => gfx.render());
 loop.add(store.update);
-loop.add((dt) => showcase.update(dt));
+loop.add((dt) => {
+  showcase.update(dt);
+  villas?.update(dt);
+});
 loop.add((dt) => {
   orders.update(dt);
   boxes.update(dt);
@@ -120,7 +130,7 @@ loop.add((dt) => {
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, gameStore, products: PRODUCT_BY_ID };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

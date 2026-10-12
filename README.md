@@ -6,6 +6,7 @@ A first-person 3D cattery shop tycoon for mobile browsers (installable PWA). Vit
 big button or a tap on the crosshair = interact. Settings (gear): graphics, look sensitivity, head bob, vibration.
 Stocking: pick up a box (it unboxes itself), aim at a shelf slot, **tap** to auto-fill one by one or **hold** to fill only while held.
 Customers: shoppers walk in, pick stocked items, queue at the counter; aim at the register and tap **Checkout** when one is ready (45 s patience).
+Villas: aim at an empty villa → **Choose a cat** to adopt one from the shelter; locked villas can be unlocked with money. Tap a cat to play.
 Desktop: click to lock the mouse, WASD to move, click / E / Space to interact, Esc to release.
 
 ## Run
@@ -45,7 +46,7 @@ src/
 - [x] M3 Cats (CatBuilder)
 - [x] M4 Products and shelves
 - [x] M5 Customers and checkout
-- [ ] M6 Villas
+- [x] M6 Villas
 - [ ] M7 Economy and progression
 - [ ] M8 Care, staff and dirt
 - [ ] M9 Polish and PWA

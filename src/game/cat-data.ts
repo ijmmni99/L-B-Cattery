@@ -1,3 +1,4 @@
+import { CAT_PRICE_FACTOR } from '../config/villas';
 import {
   BREEDS,
   BREED_BY_ID,
@@ -80,4 +81,10 @@ export function generateCat(opts: { seed?: number; breedId?: string; maxRarity?:
       seed: Math.floor(rand() * 100000),
     },
   };
+}
+
+/** What the shelter charges for a cat (breed value x rarity x factor). */
+export function catPrice(cat: CatData): number {
+  const breed = BREED_BY_ID[cat.appearance.breedId];
+  return Math.round((breed?.baseValue ?? 100) * RARITIES[cat.rarity].priceMult * CAT_PRICE_FACTOR);
 }
