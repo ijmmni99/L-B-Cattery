@@ -43,6 +43,7 @@ export class ViewModel {
   private walk = 0;
   private swayX = 0;
   private swayY = 0;
+  private kickT = 0;
   private readonly idle: [HandPose, HandPose] = [this.pose(), this.pose()];
   private readonly hold: [HandPose, HandPose] = [this.pose(), this.pose()];
 
@@ -81,11 +82,17 @@ export class ViewModel {
     const bd = 1.05;
     const [, bh] = halfAt(bd);
     this.carryAnchor.position.set(0, -bh * 0.74, -bd);
-    this.carryAnchor.rotation.set(0.12, 0, 0);
+    // Tilt the carried box toward the player so its open top (the items) is visible.
+    this.carryAnchor.rotation.set(0.5, 0, 0);
     for (const [i, s] of [[0, -1], [1, 1]] as const) {
       this.hold[i].pos.set(s * 0.27, -bh * 0.74 - 0.05, -bd + 0.08);
       this.hold[i].rot.set(-0.5, 0, s * 0.95);
     }
+  }
+
+  /** Quick forward bump of the hands (e.g. each time an item is thrown to a shelf). */
+  kick(): void {
+    this.kickT = 1;
   }
 
   /**
@@ -106,7 +113,8 @@ export class ViewModel {
 
     const bobX = Math.sin(this.phase) * 0.012 * this.walk;
     const bobY = Math.abs(Math.cos(this.phase)) * 0.016 * this.walk + Math.sin(this.time * 1.7) * 0.004;
-    this.rig.position.set(this.swayX + bobX, this.swayY - bobY, 0);
+    this.kickT = Math.max(0, this.kickT - dt * 7);
+    this.rig.position.set(this.swayX + bobX, this.swayY - bobY + this.kickT * 0.018, -this.kickT * 0.035);
     this.rig.rotation.z = -this.swayX * 0.6;
 
     const t = this.carryBlend;

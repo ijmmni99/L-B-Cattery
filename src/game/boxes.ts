@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { PRODUCT_BY_ID, type ProductDef } from '../config/products';
-import { mesh } from '../core/cache';
 import { haptic } from '../core/haptics';
 import { blobShadow } from '../models/blob-shadow';
-import { CARTON_SIZE, cartonGeometry, cartonMaterial } from '../models/product-factory';
+import { CartonView } from '../models/carton-model';
+import { CARTON_SIZE } from '../models/product-factory';
 import type { CollisionWorld } from '../world/colliders';
 import { STORE } from '../world/layout';
 import { DELIVERY_PAD } from '../world/shelf-layout';
@@ -22,6 +22,7 @@ export interface Box {
   level: number;
   colliderId: number | null;
   shadow: THREE.Mesh;
+  view: CartonView;
 }
 
 /** Delivery cartons: spawn on the pad, carry, place, stack, stock shelves. */
@@ -69,8 +70,8 @@ export class BoxManager {
 
   /** Creates a box on the floor; interactions are registered here. */
   private create(def: ProductDef, count: number): Box {
-    const group = new THREE.Group();
-    group.add(mesh(cartonGeometry(), cartonMaterial(def)));
+    const view = new CartonView(def, count);
+    const group = view.group;
     group.userData.outline = 0.012;
     const box: Box = {
       id: this.nextId++,
@@ -80,6 +81,7 @@ export class BoxManager {
       level: 0,
       colliderId: null,
       shadow: blobShadow(0.8, 0.7, 0.9),
+      view,
     };
     group.userData.box = box;
     this.boxes.push(box);
@@ -162,6 +164,7 @@ export class BoxManager {
     const box = this.create(PRODUCT_BY_ID[productId], count);
     this.player.pickUp(box.group);
     box.group.position.y = -BH / 2;
+    box.view.unbox();
     this.onChange();
   }
 
@@ -170,13 +173,53 @@ export class BoxManager {
     this.player.pickUp(box.group);
     box.group.position.y = -BH / 2;
     box.level = 0;
-    haptic(20);
+    box.view.unbox(); // opens itself: flaps swing out, items pop up
+    haptic([14, 30, 10]);
   }
 
-  /** Removes `n` items from a carried box; discards it when empty. */
+  /** Removes `n` items from a carried box; the empty box shrinks away. */
   consume(box: Box, n: number): void {
     box.count = Math.max(0, box.count - n);
-    if (box.count === 0) this.discard(box);
+    box.view.setCount(box.count);
+    if (box.count === 0) this.vanish(box);
+  }
+
+  private readonly vanishing: Array<{ box: Box; t: number }> = [];
+
+  /** Empty box: hands let go and it pops away. */
+  private vanish(box: Box): void {
+    if (this.player.carried === box.group) this.player.carried = null;
+    const i = this.boxes.indexOf(box);
+    if (i >= 0) this.boxes.splice(i, 1);
+    const item = this.itemInteractions.get(box);
+    if (item) this.interactions.remove(item);
+    this.itemInteractions.delete(box);
+    this.vanishing.push({ box, t: 0 });
+    this.onChange();
+  }
+
+  /** Per-frame: unbox animations and vanishing boxes. */
+  update(dt: number): void {
+    for (const b of this.boxes) b.view.update(dt);
+    for (let i = this.vanishing.length - 1; i >= 0; i--) {
+      const v = this.vanishing[i];
+      v.t += dt / 0.28;
+      v.box.view.update(dt);
+      const k = Math.max(0, 1 - v.t);
+      // quick squash-and-pop out
+      v.box.group.scale.set(k * (1 + (1 - k) * 0.3), k * k, k * (1 + (1 - k) * 0.3));
+      if (v.t >= 1) {
+        v.box.group.removeFromParent();
+        v.box.group.scale.set(1, 1, 1);
+        this.vanishing.splice(i, 1);
+      }
+    }
+  }
+
+  /** World-space point where items leave the hands (below / ahead of the camera). */
+  handsOrigin(out: THREE.Vector3): THREE.Vector3 {
+    const cam = this.player.view.camera;
+    return out.set(0, -0.3, -0.6).applyMatrix4(cam.matrixWorld);
   }
 
   discard(box: Box): void {

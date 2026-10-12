@@ -416,8 +416,8 @@ input[type='range'].sens {
   position: absolute;
   max-width: 46vw;
   left: 50%;
-  bottom: calc(44px + var(--safe-bottom));
-  transform: translate(-50%, 8px);
+  top: calc(12px + var(--safe-top));
+  transform: translate(-50%, -8px);
   min-width: 180px;
   padding: 7px 14px;
   border-radius: 18px;
@@ -472,8 +472,11 @@ input[type='range'].sens {
 
 @media (orientation: portrait) {
   .info-card {
-    bottom: calc(200px + var(--safe-bottom));
+    top: calc(72px + var(--safe-top));
     max-width: 80vw;
+  }
+  .toast-host {
+    top: calc(176px + var(--safe-top));
   }
 }
 
@@ -545,7 +548,7 @@ input[type='range'].sens {
 .toast-host {
   position: absolute;
   left: 50%;
-  top: calc(70px + var(--safe-top));
+  top: calc(112px + var(--safe-top));
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;

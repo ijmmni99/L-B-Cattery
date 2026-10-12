@@ -39,7 +39,7 @@ export class Highlighter {
     const material = this.materialFor((obj.userData.outline as number | undefined) ?? this.defaultThickness);
     const meshes: THREE.Mesh[] = [];
     obj.traverse((o) => {
-      if (o instanceof THREE.Mesh && !o.userData.isOutline) meshes.push(o);
+      if (o instanceof THREE.Mesh && o.visible && !o.userData.isOutline && !(o instanceof THREE.InstancedMesh)) meshes.push(o);
     });
     for (const m of meshes) {
       let shell: THREE.Mesh;

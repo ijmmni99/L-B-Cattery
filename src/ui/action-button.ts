@@ -27,15 +27,21 @@ export function createActionButton(parent: HTMLElement, input: Input): ActionBut
   btn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     btn.classList.add('pressed');
-    if (current) {
-      haptic(18);
-      input.fireAction();
+    try {
+      btn.setPointerCapture(e.pointerId);
+    } catch {
+      // capture is best-effort; leave/cancel handlers still release
     }
+    if (current) haptic(10);
+    input.actionDown();
   });
-  const release = (): void => btn.classList.remove('pressed');
+  const release = (): void => {
+    btn.classList.remove('pressed');
+    input.actionUp();
+  };
   btn.addEventListener('pointerup', release);
-  btn.addEventListener('pointerleave', release);
   btn.addEventListener('pointercancel', release);
+  btn.addEventListener('lostpointercapture', release);
 
   return {
     setLabel(text) {

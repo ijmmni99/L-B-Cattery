@@ -20,14 +20,16 @@ export class Input {
   private readonly keys = new Set<string>();
   private readonly joystick = new THREE.Vector2();
   private joystickActive = false;
-  private readonly actionListeners: Array<() => void> = [];
+  private readonly downListeners: Array<() => void> = [];
+  private readonly upListeners: Array<() => void> = [];
+  private actionHeld = false;
 
   constructor() {
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
       if (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
-        this.fireAction();
+        this.actionDown();
         return;
       }
       if (e.code in KEY_DIRS) {
@@ -35,8 +37,14 @@ export class Input {
         this.keys.add(e.code);
       }
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      if (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') this.actionUp();
+    });
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.actionUp();
+    });
   }
 
   setJoystick(x: number, y: number, active: boolean): void {
@@ -44,12 +52,26 @@ export class Input {
     this.joystickActive = active;
   }
 
-  onAction(fn: () => void): void {
-    this.actionListeners.push(fn);
+  /** Action button / E pressed. */
+  onActionDown(fn: () => void): void {
+    this.downListeners.push(fn);
   }
 
-  fireAction(): void {
-    for (const fn of this.actionListeners) fn();
+  /** Action button / E released. */
+  onActionUp(fn: () => void): void {
+    this.upListeners.push(fn);
+  }
+
+  actionDown(): void {
+    if (this.actionHeld) return;
+    this.actionHeld = true;
+    for (const fn of this.downListeners) fn();
+  }
+
+  actionUp(): void {
+    if (!this.actionHeld) return;
+    this.actionHeld = false;
+    for (const fn of this.upListeners) fn();
   }
 
   /** Call once per frame before reading `move`. */

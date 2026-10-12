@@ -11,16 +11,16 @@ const CENTER_TAP_RADIUS = 80;
  * Touch: drag on the right part of the screen (left is the joystick).
  *   A quick tap near the screen centre (the crosshair) triggers `onTap`.
  * Desktop: first click locks the pointer, then the mouse looks around and
- *   each click interacts; Esc releases. Plain dragging also works unlocked.
+ *   click (hold) interacts; Esc releases. Plain dragging also works unlocked.
  */
-export function setupLookInput(canvas: HTMLCanvasElement, fp: FirstPersonCamera, onTap: () => void): void {
+export function setupLookInput(canvas: HTMLCanvasElement, fp: FirstPersonCamera, onPress: () => void, onRelease: () => void): void {
   const drags = new Map<number, { x: number; y: number; sx: number; sy: number; t: number; moved: number }>();
   const coarse = matchMedia('(pointer: coarse)').matches;
 
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && !coarse) {
       if (document.pointerLockElement === canvas) {
-        onTap();
+        onPress();
         return;
       }
       canvas.requestPointerLock?.();
@@ -54,9 +54,17 @@ export function setupLookInput(canvas: HTMLCanvasElement, fp: FirstPersonCamera,
   const end = (e: PointerEvent): void => {
     const d = drags.get(e.pointerId);
     drags.delete(e.pointerId);
+    if (e.pointerType === 'mouse' && document.pointerLockElement === canvas) {
+      onRelease();
+      return;
+    }
     if (!d || e.type === 'pointercancel') return;
     const quick = performance.now() - d.t < TAP_MAX_MS && d.moved < TAP_MAX_MOVE;
-    if (quick && e.pointerType !== 'mouse' && nearCenter(e)) onTap();
+    // A centre tap is a quick press+release (shelves treat that as "fill all").
+    if (quick && e.pointerType !== 'mouse' && nearCenter(e)) {
+      onPress();
+      onRelease();
+    }
   };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);

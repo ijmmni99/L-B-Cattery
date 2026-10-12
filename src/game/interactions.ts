@@ -12,7 +12,14 @@ export interface Interactable {
   highlight?: THREE.Object3D;
   /** Button label, or null when this can't be used right now. */
   label(): string | null;
+  /** Fired on press when the item has no `onPress` (one-shot actions). */
   act(): void;
+  /** Press-and-hold actions (e.g. stocking): called on press... */
+  onPress?(): void;
+  /** ...and on release with how long it was held (seconds). */
+  onRelease?(heldSeconds: number): void;
+  /** Called if the crosshair leaves the item while it is pressed. */
+  onCancel?(): void;
   /** Card shown while targeted (name, details). */
   info?(): InfoCardData | null;
   onFocus?(): void;
@@ -47,6 +54,8 @@ export class InteractionSystem {
   private readonly targets: THREE.Object3D[] = [];
   private readonly hits: THREE.Intersection[] = [];
   current: Interactable | null = null;
+  private pressed: Interactable | null = null;
+  private pressedAt = 0;
 
   constructor() {
     this.raycaster.far = REACH;
@@ -89,6 +98,11 @@ export class InteractionSystem {
       }
     }
     const next = best ?? ambient;
+    if (this.pressed && this.pressed !== next) {
+      // Aim drifted off a held item: stop the hold.
+      this.pressed.onCancel?.();
+      this.pressed = null;
+    }
     if (next !== this.current) {
       this.current?.onBlur?.();
       this.current = next;
@@ -102,10 +116,25 @@ export class InteractionSystem {
     return this.current?.highlight ?? this.current?.object ?? null;
   }
 
-  trigger(): boolean {
-    if (!this.current || this.current.label() === null) return false;
-    this.current.act();
+  /** Action button pressed. Returns true if something handled it. */
+  press(): boolean {
+    const item = this.current;
+    if (!item || item.label() === null) return false;
+    if (item.onPress) {
+      this.pressed = item;
+      this.pressedAt = performance.now();
+      item.onPress();
+    } else {
+      item.act();
+    }
     return true;
+  }
+
+  release(): void {
+    const item = this.pressed;
+    if (!item) return;
+    this.pressed = null;
+    item.onRelease?.((performance.now() - this.pressedAt) / 1000);
   }
 
   private ownerOf(obj: THREE.Object3D): Interactable | null {

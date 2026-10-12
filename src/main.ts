@@ -5,7 +5,6 @@ import { GameLoop } from './core/loop';
 import { FpsCounter } from './core/fps';
 import { FirstPersonCamera } from './core/fp-camera';
 import { Input } from './core/input';
-import { haptic } from './core/haptics';
 import { getSettings, onSettingsChange } from './core/settings';
 import { setupPwa } from './core/pwa';
 import { buildStore } from './world/store';
@@ -58,7 +57,7 @@ const ring = new TargetRing();
 gfx.scene.add(ring.mesh);
 gfx.scene.add(buildDeliveryPad());
 const boxes = new BoxManager(gfx.scene, player, interactions, colliders);
-const shelves = new ShelfManager(gfx.scene, colliders, interactions, boxes);
+const shelves = new ShelfManager(gfx.scene, colliders, interactions, boxes, () => hands.kick());
 const orders = new OrderSystem(boxes);
 const showcase = new CatShowcase(gfx.scene, interactions, colliders);
 
@@ -68,14 +67,12 @@ onSettingsChange((s) => {
   if (s.quality !== gfx.profile.level) gfx.applyQuality(s.quality);
 });
 
-const interact = (): void => {
-  if (interactions.trigger()) haptic(18);
-};
-setupLookInput(canvas, view, interact);
+setupLookInput(canvas, view, () => interactions.press(), () => interactions.release());
 createJoystick(ui, input);
 const crosshair = createCrosshair(ui);
 const actionButton = createActionButton(ui, input);
-input.onAction(() => interactions.trigger());
+input.onActionDown(() => interactions.press());
+input.onActionUp(() => interactions.release());
 createSettingsPanel(ui);
 initToasts(ui);
 const hud = createHud(ui);
@@ -88,6 +85,7 @@ loop.add(store.update);
 loop.add((dt) => showcase.update(dt));
 loop.add((dt) => {
   orders.update(dt);
+  boxes.update(dt);
   shelves.update(dt);
   hud.setDeliveryEta(orders.nextEta);
 });
