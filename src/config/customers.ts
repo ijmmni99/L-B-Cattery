@@ -17,3 +17,12 @@ export const CUSTOMERS = {
   patience: 45,
   impatientBelow: 15,
 } as const;
+
+export type CustomerKind = 'regular' | 'vip' | 'kid' | 'picky';
+
+/** Customer types: arrival odds (rolled in order) and what makes each different. */
+export const KINDS = {
+  vip: { chance: 0.12, priceMult: 1.25, patience: 30, minCleanliness: 0.8, badge: '👑', title: 'VIP customer' },
+  kid: { chance: 0.15, priceMult: 1, patience: 35, speedMult: 1.25, scale: 0.78, badge: '🧸', title: 'Kid' },
+  picky: { chance: 0.15, priceMult: 1.15, patience: 45, badge: '🔍', title: 'Picky adopter' },
+} as const;

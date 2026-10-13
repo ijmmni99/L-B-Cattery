@@ -9,7 +9,7 @@ Customers: shoppers walk in, pick stocked items, queue at the counter; aim at th
 Build mode (hammer button or **B**): buy shelves, benches and villas and place them anywhere; Move and Sell tools; the ghost turns red if it would block customers. Villas are expensive (each costs more than the last). Aim at an empty villa → **Choose a cat**; tap a cat to play.
 Economy: sales and adoptions earn XP and levels (unlock products and rarer cats). Set prices in Tablet → Prices. Progress autosaves in the browser (Settings → Reset progress to erase).
 Care: cats get hungry, bored and dirty. Aim at a cat to **Feed** (uses cat food from a shelf) or **Play**, and at the litter tray to **Clean litter**. Happy, clean cats adopt for more. Customers leave messes you can **Clean up**; a messy shop gets fewer visitors. Hire a Cashier, Cleaner or Caretaker in Tablet → Staff (paid every minute).
-Days: the shop opens 9:00-18:00 (clock in the HUD) with lunch and evening rushes; after closing you get a day report (profit, stars, bonus XP). See PLAN.md for what is next.
+Days: the shop opens 9:00-18:00 (clock in the HUD) with lunch and evening rushes; after closing you get a day report (profit, stars, bonus XP). Customers come as regulars, VIPs (👑 pay 25% more, need a clean shop), kids (🧸 buy toys) and picky adopters (🔍 want a breed or personality); sold-out shelves cost you sales. See PLAN.md for what is next.
 Desktop: click to lock the mouse, WASD to move, click / E / Space to interact, Esc to release.
 
 ## Run

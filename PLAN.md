@@ -8,7 +8,7 @@ Work through these one at a time, top to bottom. Tick each when it is built, tes
   - A day runs 9:00 → 18:00 on a clock in the HUD; customers only arrive while the shop is open, with lunch and evening rushes.
   - After closing, remaining customers leave, then an end-of-day report shows revenue, supplies, wages, investments, profit, customers served, walkouts, adoptions and a 1–3 star rating (bonus XP).
   - "Start next day" resumes the shop. Day number and time are saved.
-- [ ] **2. Customer variety**
+- [x] **2. Customer variety**
   - New customer types: VIP (pays more, needs a clean shop), kid (wants toys, small baskets), picky adopter (wants a breed or personality).
   - Customers react when what they want is out of stock (bubble + leave instead of waiting).
 - [ ] **3. Cat growth and breeding**

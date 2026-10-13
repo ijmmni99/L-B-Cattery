@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CUSTOMERS } from '../config/customers';
+import { CUSTOMERS, KINDS, type CustomerKind } from '../config/customers';
 import type { ProductDef } from '../config/products';
 import { cachedGeometry, mesh, pastel, roundedBox } from '../core/cache';
 import type { ShelfSlot } from './shelves';
@@ -44,6 +44,13 @@ function basketMesh(): THREE.Group {
 export class Customer extends NavWalker {
   readonly basket: BasketLine[] = [];
   stage: CustomerStage = 'shop';
+  kind: CustomerKind = 'regular';
+  /** Emoji floating over the head while shopping (VIP crown, kid teddy, ...). */
+  badge: string | null = null;
+  /** Multiplier on shelf prices and adoption fees. */
+  priceMult = 1;
+  /** What a picky adopter is after, shown on the register card. */
+  wantText: string | null = null;
   /** Remaining slots to visit. */
   wishes: Wish[] = [];
   spotIndex = -1;
@@ -61,6 +68,20 @@ export class Customer extends NavWalker {
     super(start, nav, lookFor(lookCounter++), CUSTOMERS.walkSpeed * (0.8 + Math.random() * 0.35));
     this.character.carryAnchor.add(this.basketMesh);
     this.basketMesh.visible = false;
+  }
+
+  /** Turns this shopper into a VIP, kid or picky adopter. */
+  setKind(kind: CustomerKind): void {
+    this.kind = kind;
+    if (kind === 'regular') return;
+    const k = KINDS[kind];
+    this.badge = k.badge;
+    this.priceMult = k.priceMult;
+    this.patience = k.patience;
+    if (kind === 'kid') {
+      this.cruise *= KINDS.kid.speedMult;
+      this.root.scale.multiplyScalar(KINDS.kid.scale);
+    }
   }
 
   get total(): number {
@@ -82,7 +103,7 @@ export class Customer extends NavWalker {
   add(def: ProductDef, qty: number): void {
     const line = this.basket.find((l) => l.id === def.id);
     if (line) line.qty += qty;
-    else this.basket.push({ id: def.id, name: def.name, icon: def.icon, color: def.color, price: def.price, qty });
+    else this.basket.push({ id: def.id, name: def.name, icon: def.icon, color: def.color, price: Math.round(def.price * this.priceMult * 100) / 100, qty });
     this.holdBasket();
   }
 

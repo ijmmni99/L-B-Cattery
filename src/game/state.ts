@@ -34,10 +34,11 @@ export interface DayStats {
   invest: number;
   served: number;
   walkouts: number;
+  missed: number;
   adopted: number;
 }
 
-const freshStats = (): DayStats => ({ revenue: 0, supplies: 0, wages: 0, invest: 0, served: 0, walkouts: 0, adopted: 0 });
+const freshStats = (): DayStats => ({ revenue: 0, supplies: 0, wages: 0, invest: 0, served: 0, walkouts: 0, missed: 0, adopted: 0 });
 export const dayStats: DayStats = freshStats();
 
 export function resetDayStats(): void {

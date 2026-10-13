@@ -26,6 +26,7 @@ export function createDayReport(parent: HTMLElement, day: DayCycle): void {
       ${row('Customers served', String(r.served))}
       ${row('Cats adopted', String(r.adopted))}
       ${row('Left without buying', String(r.walkouts))}
+      ${row('Missed sales (sold out)', String(r.missed))}
       ${row('Shop cleanliness', `${Math.round(r.cleanliness * 100)}%`)}
       <button type="button" class="big-btn day-next">Start day ${r.day + 1} · +${r.xp} XP</button>`;
     card.querySelector('.day-next')?.addEventListener('click', () => {

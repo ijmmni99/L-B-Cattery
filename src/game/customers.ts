@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { CUSTOMERS } from '../config/customers';
+import { CUSTOMERS, KINDS, type CustomerKind } from '../config/customers';
+import { BREED_BY_ID } from '../config/cats';
 import { DEFAULT_PRICE } from '../config/products';
 import { PRICE_LIMIT, PRICE_OK, XP_ADOPTION, xpForSale } from '../config/progression';
 import { haptic } from '../core/haptics';
@@ -12,9 +13,9 @@ import { MESS } from '../config/care';
 import { Customer } from './customer';
 import type { MessSystem } from './mess';
 import type { InfoCardData, Interactable, InteractionSystem } from './interactions';
-import type { ShelfManager } from './shelves';
+import type { ShelfManager, ShelfSlot } from './shelves';
 import { addMoney, addXp, dayStats } from './state';
-import { VillaManager } from './villas';
+import { VillaManager, type Villa } from './villas';
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 const V = new THREE.Vector3();
@@ -25,6 +26,7 @@ export interface ShopStats {
   served: number;
   walkouts: number;
   tooExpensive: number;
+  missed: number;
   adopted: number;
   earned: number;
 }
@@ -34,7 +36,7 @@ export interface ShopStats {
  * and lets the player check them out.
  */
 export class CustomerSystem {
-  readonly stats: ShopStats = { served: 0, walkouts: 0, earned: 0, tooExpensive: 0, adopted: 0 };
+  readonly stats: ShopStats = { served: 0, walkouts: 0, earned: 0, tooExpensive: 0, missed: 0, adopted: 0 };
   private readonly customers: Customer[] = [];
   private readonly queue: Customer[] = [];
   private spawnTimer: number = CUSTOMERS.firstDelay;
@@ -134,18 +136,38 @@ export class CustomerSystem {
       const j = Math.floor(Math.random() * (i + 1));
       [slots[i], slots[j]] = [slots[j], slots[i]];
     }
-    const c = new Customer(V.set(DOOR_OUTSIDE.x, 0, DOOR_OUTSIDE.z), this.nav);
-    const n = Math.min(slots.length, CUSTOMERS.minWishes + Math.floor(Math.random() * (CUSTOMERS.maxWishes - CUSTOMERS.minWishes + 1)));
-    for (const slot of slots.slice(0, n)) {
-      const cheap = (slot.def?.price ?? 99) <= 5;
-      c.wishes.push({ kind: 'shelf', slot, qty: 1 + Math.floor(Math.random() * (cheap ? 3 : 2)) });
-    }
-    // Some visitors come to adopt: they reserve one available cat.
     const free = this.villas?.adoptable() ?? [];
-    if (free.length > 0 && (slots.length === 0 || Math.random() < CUSTOMERS.adoptChance)) {
+    const kind = this.rollKind(slots, free);
+    const c = new Customer(V.set(DOOR_OUTSIDE.x, 0, DOOR_OUTSIDE.z), this.nav);
+    c.setKind(kind);
+    const shelfWish = (slot: ShelfSlot, big: boolean): void => {
+      const cheap = (slot.def?.price ?? 99) <= 5;
+      c.wishes.push({ kind: 'shelf', slot, qty: kind === 'kid' ? 1 : 1 + Math.floor(Math.random() * (cheap || big ? 3 : 2)) });
+    };
+    if (kind === 'kid') {
+      for (const slot of slots.filter((s) => s.def?.category === 'toys').slice(0, 2)) shelfWish(slot, false);
+    } else if (kind === 'picky') {
       const villa = free[Math.floor(Math.random() * free.length)];
-      villa.reserved = true;
-      c.wishes.unshift({ kind: 'villa', villa });
+      const cat = villa.cat?.data;
+      if (cat) {
+        const byBreed = Math.random() < 0.5;
+        const breed = BREED_BY_ID[cat.appearance.breedId]?.name ?? 'cat';
+        c.wantText = byBreed ? `Wants a ${breed}` : `Wants a ${cat.personality.toLowerCase()} cat`;
+        // Pick any available villa that matches the preference.
+        const match = free.filter((v) => v.cat && (byBreed ? v.cat.data.appearance.breedId === cat.appearance.breedId : v.cat.data.personality === cat.personality));
+        const target = match[Math.floor(Math.random() * match.length)] ?? villa;
+        target.reserved = true;
+        c.wishes.push({ kind: 'villa', villa: target });
+      }
+    } else {
+      const n = Math.min(slots.length, CUSTOMERS.minWishes + Math.floor(Math.random() * (CUSTOMERS.maxWishes - CUSTOMERS.minWishes + 1)) + (kind === 'vip' ? 1 : 0));
+      for (const slot of slots.slice(0, n)) shelfWish(slot, kind === 'vip');
+      // Some visitors come to adopt: they reserve one available cat.
+      if (free.length > 0 && (slots.length === 0 || Math.random() < CUSTOMERS.adoptChance)) {
+        const villa = free[Math.floor(Math.random() * free.length)];
+        villa.reserved = true;
+        c.wishes.unshift({ kind: 'villa', villa });
+      }
     }
     if (c.wishes.length === 0) return;
     c.walkRaw([DOOR_INSIDE]);
@@ -153,12 +175,31 @@ export class CustomerSystem {
     this.customers.push(c);
   }
 
+  /** Rolls a customer type; a type only comes when the shop can serve it. */
+  private rollKind(slots: ShelfSlot[], free: Villa[]): CustomerKind {
+    const r = Math.random();
+    if (r < KINDS.vip.chance && this.cleanliness() >= KINDS.vip.minCleanliness && slots.length > 0) return 'vip';
+    if (r < KINDS.vip.chance + KINDS.kid.chance && slots.some((s) => s.def?.category === 'toys')) return 'kid';
+    if (r < KINDS.vip.chance + KINDS.kid.chance + KINDS.picky.chance && free.length > 0) return 'picky';
+    return 'regular';
+  }
+
   private think(c: Customer, dt: number): void {
+    if (c.badge && c.stage !== 'waiting' && c.stage !== 'leaving') c.mood(dt, c.badge);
     switch (c.stage) {
       case 'shop': {
         if (!c.idle) return;
         // Drop wishes whose shelf or villa was removed in build mode.
         while (c.wishes[0] && (c.wishes[0].kind === 'villa' ? c.wishes[0].villa.removed : c.wishes[0].slot.unit.removed)) c.wishes.shift();
+        // A shelf emptied by someone else before they got there: a missed sale.
+        const first = c.wishes[0];
+        if (first?.kind === 'shelf' && first.slot.count === 0) {
+          c.wishes.shift();
+          c.bubble.show('😕');
+          this.stats.missed++;
+          dayStats.missed++;
+          return;
+        }
         const wish = c.wishes[0];
         if (!wish) {
           this.finishShopping(c);
@@ -189,7 +230,7 @@ export class CustomerSystem {
         if (wish?.kind === 'villa') {
           const cat = wish.villa.removed ? null : wish.villa.cat;
           if (cat) {
-            c.addAdoption(wish.villa, cat.data.name, VillaManager.adoptionFee(wish.villa));
+            c.addAdoption(wish.villa, cat.data.name, Math.round(VillaManager.adoptionFee(wish.villa) * c.priceMult));
             cat.meow();
           } else {
             wish.villa.reserved = false;
@@ -208,6 +249,11 @@ export class CustomerSystem {
             if (got > 0) {
               c.add(def, got);
               haptic(4);
+            } else {
+              // Someone else bought the last one while they were walking over.
+              c.bubble.show('😕');
+              this.stats.missed++;
+              dayStats.missed++;
             }
           }
         }
@@ -338,9 +384,9 @@ export class CustomerSystem {
     const mood = c.patience < CUSTOMERS.impatientBelow ? '😠 Impatient' : '😊 Happy';
     return {
       key: `cust:${c.itemCount}:${c.total}:${mood}`,
-      title: 'Customer at the register',
+      title: c.kind === 'regular' ? 'Customer at the register' : `${KINDS[c.kind].title} at the register`,
       sub: c.basket.map((l) => (l.qty > 1 ? `${l.qty}× ${l.name}` : l.name)).join(', '),
-      tag: mood,
+      tag: c.wantText ? `${mood} · ${c.wantText}` : mood,
     };
   }
 }
