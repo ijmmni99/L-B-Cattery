@@ -351,7 +351,7 @@ export class BuildMode {
       return;
     }
     const cost = this.costOf(kind);
-    if (!spendMoney(cost)) {
+    if (!spendMoney(cost, 'invest')) {
       toast(`Not enough money · need $${cost}`, 'bad');
       sfx.error();
       haptic([20, 40, 20]);

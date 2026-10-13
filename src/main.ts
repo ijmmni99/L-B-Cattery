@@ -42,6 +42,9 @@ import { createTablet } from './ui/tablet';
 import { MESS } from './config/care';
 import { MessSystem } from './game/mess';
 import { StaffSystem } from './game/staff';
+import { formatClock } from './config/day';
+import { DayCycle } from './game/day';
+import { createDayReport } from './ui/day-report';
 import { BuildMode } from './game/build-mode';
 import { createGoals } from './ui/goals';
 import { sfx } from './core/sfx';
@@ -91,6 +94,8 @@ const cleanliness = (): number => {
   return Math.max(0, Math.min(1, 1 - mess.count * MESS.perMess - dirt * MESS.perVillaDirt));
 };
 const customers = new CustomerSystem(gfx.scene, shelves, interactions, counter, colliders, player.position, villas, mess, cleanliness);
+const day = new DayCycle();
+customers.schedule = { isOpen: () => day.isOpen, rush: () => day.rush };
 const staff = new StaffSystem(gfx.scene, customers.nav, customers, mess, villas);
 
 // ---- Save / load (localStorage). Restored before the first frame.
@@ -107,6 +112,7 @@ const snapshot = (): SaveData => {
     boxes: boxes.serialize(),
     orders: orders.serialize(),
     staff: staff.roles(),
+    day: day.serialize(),
   };
 };
 const saved = loadSave();
@@ -125,6 +131,7 @@ if (saved) {
   shelves.restore(saved.shelves ?? []);
   boxes.spawnBoxes(saved.boxes ?? []);
   orders.restore(saved.orders ?? []);
+  if (saved.day) day.restore(saved.day);
   for (const r of saved.staff ?? []) if (r === 'cashier' || r === 'cleaner' || r === 'caretaker') staff.hire(r, true);
 }
 onPriceChange(() => shelves.markDirty());
@@ -164,8 +171,13 @@ createSettingsPanel(ui, undefined, resetGame);
 initToasts(ui);
 const hud = createHud(ui);
 createTablet(ui, orders, staff);
-createCheckoutPanel(ui, customers);
+const checkoutPanel = createCheckoutPanel(ui, customers);
 createBuildBar(ui, build, villas !== null, () => undefined);
+createDayReport(ui, day);
+day.onReport(() => {
+  checkoutPanel.dismiss();
+  customers.clearAll();
+});
 if (catTestMode) createShowcasePanel(ui, showcase);
 if (villas) openCatShop = createCatShop(ui, villas);
 const infoCard = createInfoCard(ui);
@@ -182,11 +194,14 @@ loop.add((dt) => {
   orders.update(dt);
   boxes.update(dt);
   shelves.update(dt);
-  if (!build.active) {
-    customers.update(dt); // the shop is paused while building
+  // The shop is paused while building and while the end-of-day report is up.
+  if (!build.active && day.phase !== 'report') {
+    customers.update(dt);
     staff.update(dt);
+    day.update(dt, customers.inStore, cleanliness());
   }
   hud.setClean(cleanliness());
+  hud.setClock(day.day, formatClock(day.hour), day.isOpen);
   goals.update(dt);
   goals.setVisible(!build.active);
   const dx = DOOR_INSIDE.x - 0.4;
@@ -220,7 +235,7 @@ loop.add((dt) => {
 
 if (FpsCounter.enabled()) {
   // Test hook for automated checks (debug builds only).
-  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, build, staff, mess, snapshot, gameStore, products: PRODUCT_BY_ID };
+  (window as Window & { __lb?: unknown }).__lb = { player, view, interactions, scene: gfx.scene, showcase, boxes, shelves, orders, customers, colliders, door, villas, build, staff, mess, day, snapshot, gameStore, products: PRODUCT_BY_ID };
   const fps = new FpsCounter(ui, () => gfx.drawCalls);
   loop.add((dt) => fps.update(dt));
 }

@@ -71,7 +71,7 @@ export class StaffSystem {
     const def = STAFF_BY_ROLE[role];
     if (this.has(role)) return { ok: false, reason: 'Already hired' };
     if (gameStore.getState().level < def.hireLevel) return { ok: false, reason: `Unlocks at level ${def.hireLevel}` };
-    if (!free && !spendMoney(this.hireCost(role))) return { ok: false, reason: 'Not enough money' };
+    if (!free && !spendMoney(this.hireCost(role), 'invest')) return { ok: false, reason: 'Not enough money' };
     const m = new StaffMember(role, this.nav);
     this.members.push(m);
     this.scene.add(m.root, m.bubble.sprite);
@@ -108,7 +108,7 @@ export class StaffSystem {
   private payWages(): void {
     for (const m of [...this.members]) {
       const def = STAFF_BY_ROLE[m.role];
-      if (!spendMoney(def.wage)) {
+      if (!spendMoney(def.wage, 'wages')) {
         toast(`${def.name} quit: couldn't be paid`, 'bad');
         this.fire(m.role);
       }

@@ -59,14 +59,14 @@ export function createCatShop(parent: HTMLElement, villas: VillaManager): (villa
     if (!el || !target) return;
     if (el.dataset.act === 'close') close();
     else if (el.dataset.act === 'reroll') {
-      if (!spendMoney(REROLL_COST)) return;
+      if (!spendMoney(REROLL_COST, 'invest')) return;
       sfx.cash();
       roll();
       render();
     } else if (el.dataset.act === 'adopt') {
       const cat = offers[Number(el.dataset.i)];
       if (!cat || target.cat) return;
-      if (!spendMoney(catPrice(cat))) {
+      if (!spendMoney(catPrice(cat), 'invest')) {
         toast('Not enough money', 'bad');
         return;
       }

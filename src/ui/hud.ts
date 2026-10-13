@@ -1,6 +1,8 @@
 import { gameStore, levelProgress } from '../game/state';
 
 export interface Hud {
+  /** Day number, clock text and whether the shop is still open. */
+  setClock(day: number, time: string, open: boolean): void;
   /** 0..1 shop cleanliness; the pill only shows when it is low. */
   setClean(value: number): void;
   /** Seconds until the next delivery (null = none on the way). */
@@ -15,6 +17,7 @@ export function createHud(parent: HTMLElement): Hud {
   el.className = 'hud';
   el.innerHTML = `
     <div class="pill money"><span class="coin">$</span><span class="money-value"></span></div>
+    <div class="pill clock"><span>🕘</span><span class="clock-text"></span></div>
     <div class="pill level"><span class="lvl"></span><span class="xpbar"><i></i></span></div>
     <div class="pill messy hidden"><span>🧹</span><span class="messy-text"></span></div>
     <div class="pill delivery hidden"><span>📦</span><span class="delivery-text"></span></div>`;
@@ -23,11 +26,13 @@ export function createHud(parent: HTMLElement): Hud {
   const value = el.querySelector<HTMLElement>('.money-value');
   const lvl = el.querySelector<HTMLElement>('.lvl');
   const bar = el.querySelector<HTMLElement>('.xpbar i');
+  const clock = el.querySelector<HTMLElement>('.clock');
+  const clockText = el.querySelector<HTMLElement>('.clock-text');
   const messy = el.querySelector<HTMLElement>('.messy');
   const messyText = el.querySelector<HTMLElement>('.messy-text');
   const delivery = el.querySelector<HTMLElement>('.delivery');
   const deliveryText = el.querySelector<HTMLElement>('.delivery-text');
-  if (!messy || !messyText || !lvl || !bar || !money || !value || !delivery || !deliveryText) throw new Error('hud markup');
+  if (!clock || !clockText || !messy || !messyText || !lvl || !bar || !money || !value || !delivery || !deliveryText) throw new Error('hud markup');
 
   let last = gameStore.getState().money;
   const render = (): void => {
@@ -48,7 +53,15 @@ export function createHud(parent: HTMLElement): Hud {
 
   let shown: string | null = null;
   let cleanShown = -1;
+  let clockShown = '';
   return {
+    setClock(day, time, open) {
+      const text = open ? `Day ${day} · ${time}` : `Day ${day} · Closing`;
+      if (text === clockShown) return;
+      clockShown = text;
+      clockText.textContent = text;
+      clock.classList.toggle('closing', !open);
+    },
     setClean(value) {
       const pct = Math.round(value * 100);
       if (pct === cleanShown) return;

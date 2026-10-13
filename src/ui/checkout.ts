@@ -22,7 +22,7 @@ function pickPayment(total: number): NonNullable<Customer['payment']> {
  * Register panel: scan every item, take payment, then count out the change.
  * Overpaying the change costs the shop; exact change from a happy customer can earn a tip.
  */
-export function createCheckoutPanel(parent: HTMLElement, system: CustomerSystem): void {
+export function createCheckoutPanel(parent: HTMLElement, system: CustomerSystem): { dismiss(): void } {
   const overlay = document.createElement('div');
   overlay.className = 'sheet-overlay checkout-overlay';
   overlay.innerHTML = `<div class="sheet checkout-sheet" role="dialog" aria-label="Checkout"></div>`;
@@ -199,4 +199,5 @@ export function createCheckoutPanel(parent: HTMLElement, system: CustomerSystem)
     overlay.classList.add('open');
     render();
   };
+  return { dismiss: () => close(false) };
 }

@@ -4,7 +4,7 @@ Work through these one at a time, top to bottom. Tick each when it is built, tes
 
 ## Do first
 
-- [ ] **1. Day cycle and shop hours**
+- [x] **1. Day cycle and shop hours**
   - A day runs 9:00 → 18:00 on a clock in the HUD; customers only arrive while the shop is open, with lunch and evening rushes.
   - After closing, remaining customers leave, then an end-of-day report shows revenue, supplies, wages, investments, profit, customers served, walkouts, adoptions and a 1–3 star rating (bonus XP).
   - "Start next day" resumes the shop. Day number and time are saved.

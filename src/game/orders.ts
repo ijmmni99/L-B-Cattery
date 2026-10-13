@@ -30,7 +30,7 @@ export class OrderSystem {
     const level = gameStore.getState().level;
     for (const id of Object.keys(clean)) if (PRODUCT_BY_ID[id].unlockLevel > level) return { ok: false, reason: `${PRODUCT_BY_ID[id].name} unlocks at level ${PRODUCT_BY_ID[id].unlockLevel}` };
     const total = OrderSystem.total(clean);
-    if (!spendMoney(total)) return { ok: false, reason: 'Not enough money' };
+    if (!spendMoney(total, 'supplies')) return { ok: false, reason: 'Not enough money' };
     this.pending.push({ lines: clean, eta: DELIVERY_SECONDS });
     toast(`Ordered · arrives in ${DELIVERY_SECONDS}s`, 'good');
     return { ok: true, total };

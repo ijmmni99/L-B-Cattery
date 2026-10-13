@@ -24,10 +24,31 @@ export function addMoney(amount: number): void {
   gameStore.setState((s) => ({ money: Math.round((s.money + amount) * 100) / 100 }));
 }
 
+/** What today's money was spent on (investments are builds, cats and hiring). */
+export type ExpenseKind = 'supplies' | 'wages' | 'invest';
+
+export interface DayStats {
+  revenue: number;
+  supplies: number;
+  wages: number;
+  invest: number;
+  served: number;
+  walkouts: number;
+  adopted: number;
+}
+
+const freshStats = (): DayStats => ({ revenue: 0, supplies: 0, wages: 0, invest: 0, served: 0, walkouts: 0, adopted: 0 });
+export const dayStats: DayStats = freshStats();
+
+export function resetDayStats(): void {
+  Object.assign(dayStats, freshStats());
+}
+
 /** Returns false (and changes nothing) if the shop can't afford it. */
-export function spendMoney(amount: number): boolean {
+export function spendMoney(amount: number, kind?: ExpenseKind): boolean {
   if (gameStore.getState().money < amount) return false;
   addMoney(-amount);
+  if (kind) dayStats[kind] += amount;
   return true;
 }
 

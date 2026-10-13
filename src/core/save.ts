@@ -17,6 +17,7 @@ export interface SaveData {
   shelves: Array<{ id: string; productId: string; count: number }>;
   villas: Array<{ id: string; unlocked?: boolean; cat: CatData | null; needs?: { food: number; fun: number }; dirt?: number }>;
   staff?: string[];
+  day?: { n: number; t: number; closed: boolean };
   boxes: Array<{ productId: string; count: number }>;
   orders: PendingOrder[];
 }

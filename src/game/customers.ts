@@ -13,7 +13,7 @@ import { Customer } from './customer';
 import type { MessSystem } from './mess';
 import type { InfoCardData, Interactable, InteractionSystem } from './interactions';
 import type { ShelfManager } from './shelves';
-import { addMoney, addXp } from './state';
+import { addMoney, addXp, dayStats } from './state';
 import { VillaManager } from './villas';
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
@@ -39,6 +39,8 @@ export class CustomerSystem {
   private readonly queue: Customer[] = [];
   private spawnTimer: number = CUSTOMERS.firstDelay;
   readonly nav: NavGrid;
+  /** Opening hours (set by the day cycle): no new customers while closed; `rush` scales arrivals. */
+  schedule: { isOpen(): boolean; rush(): number } | null = null;
   /** Set by the checkout panel; called when the player starts serving the first customer. */
   onCheckout: ((c: Customer) => void) | null = null;
 
@@ -74,6 +76,17 @@ export class CustomerSystem {
     return this.customers.some((c) => Math.hypot(c.position.x - x, c.position.z - z) < r);
   }
 
+  /** End of day: everyone is gone at once (reservations released). */
+  clearAll(): void {
+    for (const c of this.customers) {
+      for (const w of c.wishes) if (w.kind === 'villa') w.villa.reserved = false;
+      for (const l of c.basket) if (l.villa) l.villa.reserved = false;
+      this.scene.remove(c.root, c.bubble.sprite);
+    }
+    this.customers.length = 0;
+    this.queue.length = 0;
+  }
+
   get inStore(): number {
     return this.customers.length;
   }
@@ -85,8 +98,8 @@ export class CustomerSystem {
   update(dt: number): void {
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      this.spawnTimer = rand(CUSTOMERS.spawnMin, CUSTOMERS.spawnMax) / (0.4 + 0.6 * this.cleanliness());
-      if (this.customers.length < CUSTOMERS.maxInStore && (this.shelves.stockedSlots().length > 0 || (this.villas?.adoptable().length ?? 0) > 0)) this.spawn();
+      this.spawnTimer = rand(CUSTOMERS.spawnMin, CUSTOMERS.spawnMax) / ((0.4 + 0.6 * this.cleanliness()) * (this.schedule?.rush() ?? 1));
+      if ((this.schedule?.isOpen() ?? true) && this.customers.length < CUSTOMERS.maxInStore && (this.shelves.stockedSlots().length > 0 || (this.villas?.adoptable().length ?? 0) > 0)) this.spawn();
     }
 
     for (let i = this.customers.length - 1; i >= 0; i--) {
@@ -253,6 +266,7 @@ export class CustomerSystem {
   private walkOut(c: Customer): void {
     this.queue.splice(this.queue.indexOf(c), 1);
     this.stats.walkouts++;
+    dayStats.walkouts++;
     c.bubble.show('😠');
     toast('A customer got tired of waiting and left', 'bad');
     this.leave(c);
@@ -281,12 +295,15 @@ export class CustomerSystem {
   completeCheckout(c: Customer, extra: number): void {
     const gain = Math.round((c.total + extra) * 100) / 100;
     addMoney(gain);
+    dayStats.revenue += gain;
+    dayStats.served++;
     this.stats.served++;
     this.stats.earned += gain;
     for (const l of c.basket) {
       if (l.villa) {
         this.villas?.releaseCat(l.villa);
         this.stats.adopted++;
+        dayStats.adopted++;
         addXp(XP_ADOPTION);
       }
     }
